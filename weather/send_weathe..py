@@ -6,7 +6,7 @@ from datetime import datetime
 
 # 从环境变量中读取配置
 QQ_USER_ID = os.getenv('QQ_USER_ID', '80116747')  # 默认QQ号
-QQBOT_API_URL = os.getenv('QQBOT_API_URL', 'https://bot.asbid.cn/send_private_msg')  # 默认QQBOT API地址
+QQBOT_API_URL = os.getenv('QQBOT_API_URL', 'https://bot.asbid.cn')  # 默认QQBOT API地址
 GAODE_API_KEY = os.getenv('GAODE_API_KEY')  # 高德API Key
 CITY_CODE = os.getenv('CITY_CODE', '110101')  # 默认城市编码（北京）
 
