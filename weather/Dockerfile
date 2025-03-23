@@ -5,7 +5,7 @@ FROM python:3.9-slim
 WORKDIR /app
 
 # 复制当前目录下的文件到工作目录
-COPY . /app
+COPY weather/ /app
 
 # 安装依赖
 RUN pip install --no-cache-dir requests schedule

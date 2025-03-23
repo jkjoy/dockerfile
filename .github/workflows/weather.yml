@@ -43,7 +43,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           push: true
-          context: weather  # 构建上下文设置为 weather 目录
+          context: .  # 构建上下文设置为 weather 目录
           file: weather/Dockerfile  # 指定 Dockerfile 路径
           platforms: |
             linux/amd64
