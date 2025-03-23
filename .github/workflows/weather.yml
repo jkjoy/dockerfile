@@ -43,7 +43,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           push: true
-          context: weather
+          context: .
           file: weather/Dockerfile  # 指定 Dockerfile 路径
           platforms: |
             linux/amd64
