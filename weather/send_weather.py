@@ -3,6 +3,10 @@ import requests
 import schedule
 import time
 from datetime import datetime
+import pytz  # 需要安装 pytz 库
+
+# 设置时区
+TIMEZONE = pytz.timezone('Asia/Shanghai')
 
 # 从环境变量中读取配置
 QQ_USER_ID = os.getenv('QQ_USER_ID', '80116747')  # 默认QQ号
@@ -28,7 +32,7 @@ def get_weather():
 def send_message():
     try:
         # 获取当前时间和天气
-        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        current_time = datetime.now(TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')  # 使用指定时区
         temperature, weather = get_weather()
         
         # 构造消息内容
@@ -46,12 +50,12 @@ def send_message():
     except Exception as e:
         print(f"发生错误: {e}")
 
-# 每小时执行一次
-schedule.every().hour.do(send_message)
+# 每 15 分钟执行一次
+schedule.every(15).minutes.do(send_message)
 
 # 主循环
 if __name__ == '__main__':
-    print("定时任务已启动，每小时发送一次消息...")
+    print("定时任务已启动，每 15 分钟发送一次消息...")
     while True:
         schedule.run_pending()
         time.sleep(1)
