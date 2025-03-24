@@ -170,3 +170,46 @@ docker run -d \
   jkjoy/webhook:alpine \
   -verbose -hooks=hooks.yml -hotreload
 ```
+
+## Pleroma on cloud
+
+```
+docker run -d \
+  --name=pleroma \
+  -e INSTANCE_NAME=Pleroma \
+  -e DOMAIN=miantiao.me \
+  -e DB_HOST=pleroma.aivencloud.com \
+  -e DB_PORT=28404 \
+  -e DB_NAME=pleroma \
+  -e DB_USER=avnadmin \
+  -e DB_PASS=AVNS_password \
+  -p 4000:4000 \
+  jkjoy/pleroma-on-cloud
+```
+### 开始部署此项目
+
+**注意修改环境变量** 为你自己的域名和数据库地址
+
+    ```env
+    INSTANCE_NAME=Pleroma # 实例英文名称
+    DOMAIN=miantiao.me # 实例域名
+    DB_HOST=pleroma.aivencloud.com # 数据库主机地址
+    DB_PORT=28404 # 数据库端口
+    DB_NAME=pleroma # 数据库名称
+    DB_USER=avnadmin # 数据库用户名
+    DB_PASS=AVNS_password # 数据库密码
+    ```
+
+### 使用云平台的 Console/Shell 功能
+
+注册你的管理员账号（Zeabur 不支持此功能建议本地/其他平台部署创建账号后再部署到 Zeabur）
+
+    `./bin/pleroma_ctl user new fakeadmin admin@test.net --admin`
+
+### 云平台绑定域名
+
+管理员账号登录，进入后台配置实例信息（文件存储，Email通知等等）
+
+   - 管理界面路径是 `/pleroma/admin/#/`
+   - 修改前端为 soapbox 方法：在 Settings - Frontend - Primary 中，修改 Name 为 `soapbox` Reference 为 `static`
+   - 不建议加入 Relay, 中继信息大多无用还占用数据库，你只需要关注感兴趣的用户就行
