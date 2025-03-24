@@ -21,7 +21,7 @@ RUN mkdir -p /etc/pleroma \
     && mkdir -p ${DATA}/static \
     && chown -R pleroma ${DATA}
 
-COPY ./config.exs /etc/pleroma/config.exs
+COPY ./pleroma/config.exs /etc/pleroma/config.exs
 
 RUN chown -R pleroma /etc/pleroma
 RUN chmod o= /etc/pleroma/config.exs
@@ -45,7 +45,7 @@ RUN mv ${DATA}/static/Smoji-master ${DATA}/static/emoji
 RUN rm ${DATA}/static/emoji/.gitignore ${DATA}/static/emoji/LICENSE ${DATA}/static/emoji/README.md
 RUN rm smoji.zip
 
-COPY ./static/* ${DATA}/static/frontends/soapbox/static/
+COPY ./pleroma/static/* ${DATA}/static/frontends/soapbox/static/
 
 RUN echo "import Mix.Config" > config/prod.secret.exs \
     && mix local.hex --force \
