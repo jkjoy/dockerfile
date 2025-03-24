@@ -1,52 +1,54 @@
 import Config
 
-# 基础配置
-config :pleroma, :configurable_from_database, true
-
-# 中继配置
-config :pleroma, :relays, enabled: true
-  
-# 终端点配置
 config :pleroma, Pleroma.Web.Endpoint,
-  url: [host: System.fetch_env!("DOMAIN"), scheme: "https", port: 443],
-  http: [ip: {0, 0, 0, 0}, port: 4000]
+  url: [host: System.get_env("DOMAIN", "localhost"), scheme: "https", port: 443],
+  http: [ip: {0, 0, 0, 0}, port: System.get_env("PORT", "4000")]
 
-# 实例配置
 config :pleroma, :instance,
-  name: System.fetch_env!("INSTANCE_NAME"),
-  email: System.fetch_env!("ADMIN_EMAIL"),
-  notify_email: System.fetch_env!("NOTIFY_EMAIL"),
+  name: System.get_env("INSTANCE_NAME", "Pleroma"),
+  email: System.get_env("ADMIN_EMAIL"),
+  notify_email: System.get_env("NOTIFY_EMAIL"),
   limit: 5000,
-  registrations_open: true,
+  registrations_open: false,
   federating: true,
-  healthcheck: true,
-  static_dir: "/var/lib/pleroma/static"
+  healthcheck: true
 
-# 媒体代理配置
 config :pleroma, :media_proxy,
   enabled: false,
-  redirect_on_failure: false
+  redirect_on_failure: true,
+  base_url: "https://cache.domain.tld"
 
-# 数据库配置
 config :pleroma, Pleroma.Repo,
   adapter: Ecto.Adapters.Postgres,
-  username: System.fetch_env!("DB_USER"),
+  username: System.get_env("DB_USER", "pleroma"),
   password: System.fetch_env!("DB_PASS"),
-  database: System.fetch_env!("DB_NAME"),
-  hostname: System.fetch_env!("DB_HOST"),
-  pool_size: 10
+  database: System.get_env("DB_NAME", "pleroma"),
+  hostname: System.get_env("DB_HOST", "db"),
+  port: System.get_env("DB_PORT", "5432"),
+  pool_size: 10,
+  ssl: true,
+  ssl_opts: [
+    cacertfile: "/etc/ssl/certs/ca-certificates.crt",
+    verify: :verify_none,
+    #verify: :verify_peer,
+    server_name_indication: to_charlist(System.get_env("DB_HOST", "db")),
+    customize_hostname_check: [
+      # By default, Erlang does not support wildcard certificates. This function supports validating wildcard hosts
+      match_fun: :public_key.pkix_verify_hostname_match_fun(:https)
+    ]
+  ]
 
-# Web Push 通知配置
-config :web_push_encryption, :vapid_details,
-  subject: "mailto:#{System.fetch_env!("NOTIFY_EMAIL")}"
+# Configure web push notifications
+config :web_push_encryption, :vapid_details, subject: "mailto:#{System.get_env("NOTIFY_EMAIL")}"
 
-# 数据库扩展配置
 config :pleroma, :database, rum_enabled: false
-
-# 上传配置
+config :pleroma, :instance, static_dir: "/var/lib/pleroma/static"
 config :pleroma, Pleroma.Uploaders.Local, uploads: "/var/lib/pleroma/uploads"
 
-# 密钥配置
+# Configure from database
+config :pleroma, configurable_from_database: true
+
+# We can't store the secrets in this file, since this is baked into the docker image
 if not File.exists?("/var/lib/pleroma/secret.exs") do
   secret = :crypto.strong_rand_bytes(64) |> Base.encode64() |> binary_part(0, 64)
   signing_salt = :crypto.strong_rand_bytes(8) |> Base.encode64() |> binary_part(0, 8)
@@ -76,13 +78,12 @@ end
 
 import_config("/var/lib/pleroma/secret.exs")
 
-# 额外的用户配置
-if File.exists?("/var/lib/pleroma/config.exs") do
-  import_config("/var/lib/pleroma/config.exs")
-else
-  File.write("/var/lib/pleroma/config.exs", """
-  import Config
+# For additional user config
+if File.exists?("/var/lib/pleroma/config.exs"),
+  do: import_config("/var/lib/pleroma/config.exs"),
+  else:
+    File.write("/var/lib/pleroma/config.exs", """
+    import Config
 
-  # 在这里添加额外的配置
-  """)
-end
+    # For additional configuration outside of environmental variables
+    """)
