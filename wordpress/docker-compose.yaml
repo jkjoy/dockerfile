@@ -1,0 +1,13 @@
+services:
+  wordpress:
+    image: jkjoy/wordpress
+    container_name: wordpress
+    restart: always
+    ports:
+      - '8080:80'
+    volumes:
+      - ./data:/app/data
+    environment:
+      - FORCE_SSL_LOGIN=false #默认为true  强制https登录
+      - FORCE_SSL_ADMIN=false #默认为true  强制https管理后台
+      - HTTPS_ENABLED=false #默认为true  启用https

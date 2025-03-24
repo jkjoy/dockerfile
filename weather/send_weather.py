@@ -51,7 +51,7 @@ def send_message():
         print(f"发生错误: {e}")
 
 # 每 15 分钟执行一次
-schedule.every(15).minutes.do(send_message)
+schedule.every(45).minutes.do(send_message)
 
 # 主循环
 if __name__ == '__main__':
