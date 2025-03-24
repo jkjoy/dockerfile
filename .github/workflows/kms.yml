@@ -44,7 +44,7 @@ jobs:
         with:
           push: true
           context: .
-          file: weather/Dockerfile  # 指定 Dockerfile 路径
+          file: kms/Dockerfile  # 指定 Dockerfile 路径
           platforms: |
             linux/amd64
             linux/arm64
