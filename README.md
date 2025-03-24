@@ -43,3 +43,14 @@ docker run -d \
 ```bash 
 docker run -d -p 1688:1688 --name kms-server jkjoy/kms
 ```
+
+## Typecho Use Sqlite
+
+```bash 
+docker run -d -p 80:80 jkjoy/typecho
+```
+
+映射目录
+```
+-v /typecho:/app/data
+```
