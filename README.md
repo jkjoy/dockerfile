@@ -24,6 +24,7 @@ docker run -d \
 |QQBOT_API_URL	|QQBOT的API地址	|https://bot.asbid.cn/send_private_msg|
 |GAODE_API_KEY	|高德地图的API Key	|无（必须指定）|
 |CITY_CODE	|高德地图的城市编码（ADCode）	|110101（北京）|
+|SEND_FREQUENCY_MINUTES|发送频率（分钟）|60|
 
 ## Wordpress use Sqlite
 

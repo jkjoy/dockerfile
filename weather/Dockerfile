@@ -17,7 +17,10 @@ ENV TZ=Asia/Shanghai \
     QQ_USER_ID=80116747 \
     QQBOT_API_URL=https://bot.asbid.cn \
     GAODE_API_KEY=your_gaode_api_key \
-    CITY_CODE=110101
+    CITY_CODE=110101 \
+    SEND_FREQUENCY_MINUTES=60 \
+    MAX_RETRIES="5" \
+    REQUEST_TIMEOUT="15" 
 
 # 运行脚本
 CMD ["python", "send_weather.py"]
