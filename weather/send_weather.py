@@ -5,10 +5,11 @@ import time
 import logging
 from datetime import datetime
 import pytz
-from urllib.parse import quote
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 import sys
+from pathlib import Path
+from dotenv import load_dotenv
 
 # 配置日志
 logging.basicConfig(
@@ -21,22 +22,70 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# 环境变量配置类
 class Config:
     def __init__(self):
+        # 如果.env文件存在则加载，不存在也不报错
+        env_path = Path('.env')
+        if env_path.exists():
+            load_dotenv()
+            logger.info("已加载 .env 文件")
+        else:
+            logger.info("未找到 .env 文件，将使用系统环境变量")
+        
         # 必需的环境变量
-        self.GAODE_API_KEY = os.getenv('GAODE_API_KEY')
+        self.GAODE_API_KEY = os.environ.get('GAODE_API_KEY')
         if not self.GAODE_API_KEY:
-            raise ValueError("请设置 GAODE_API_KEY 环境变量")
+            raise ValueError("未设置 GAODE_API_KEY 环境变量")
 
         # 可选的环境变量（带默认值）
-        self.TIMEZONE = pytz.timezone(os.getenv('TIMEZONE', 'Asia/Shanghai'))
-        self.QQ_USER_ID = os.getenv('QQ_USER_ID', '80116747')
-        self.QQBOT_API_URL = os.getenv('QQBOT_API_URL', 'https://bot.asbid.cn')
-        self.CITY_CODE = os.getenv('CITY_CODE', '110101')
-        self.SEND_FREQUENCY_MINUTES = int(os.getenv('SEND_FREQUENCY_MINUTES', '60'))
-        self.REQUEST_TIMEOUT = int(os.getenv('REQUEST_TIMEOUT', '10'))
-        self.MAX_RETRIES = int(os.getenv('MAX_RETRIES', '3'))
+        self.TIMEZONE = pytz.timezone(os.environ.get('TIMEZONE', 'Asia/Shanghai'))
+        self.QQ_USER_ID = os.environ.get('QQ_USER_ID', '80116747')
+        self.QQBOT_API_URL = os.environ.get('QQBOT_API_URL', 'https://bot.asbid.cn')
+        self.CITY_CODE = os.environ.get('CITY_CODE', '110101')
+        
+        # 尝试从环境变量获取数值，如果失败则使用默认值
+        try:
+            self.SEND_FREQUENCY_MINUTES = int(os.environ.get('SEND_FREQUENCY_MINUTES', '15'))
+        except ValueError:
+            self.SEND_FREQUENCY_MINUTES = 60
+            logger.warning("SEND_FREQUENCY_MINUTES 格式无效，使用默认值: 60")
+
+        try:
+            self.REQUEST_TIMEOUT = int(os.environ.get('REQUEST_TIMEOUT', '10'))
+        except ValueError:
+            self.REQUEST_TIMEOUT = 10
+            logger.warning("REQUEST_TIMEOUT 格式无效，使用默认值: 10")
+
+        try:
+            self.MAX_RETRIES = int(os.environ.get('MAX_RETRIES', '3'))
+        except ValueError:
+            self.MAX_RETRIES = 3
+            logger.warning("MAX_RETRIES 格式无效，使用默认值: 3")
+
+        # 消息模板
+        default_template = (
+            "时间: {time}\n"
+            "温度: {temperature}°C\n"
+            "天气: {weather}\n"
+            "湿度: {humidity}%\n"
+            "风向: {winddirection}\n"
+            "风力: {windpower}"
+        )
+        self.MESSAGE_TEMPLATE = os.environ.get('MESSAGE_TEMPLATE', default_template)
+
+        # 日志输出当前配置
+        self._log_config()
+
+    def _log_config(self):
+        """记录当前配置信息"""
+        logger.info("当前配置信息:")
+        logger.info(f"时区: {self.TIMEZONE}")
+        logger.info(f"QQ用户ID: {self.QQ_USER_ID}")
+        logger.info(f"城市代码: {self.CITY_CODE}")
+        logger.info(f"发送频率: {self.SEND_FREQUENCY_MINUTES}分钟")
+        logger.info(f"请求超时: {self.REQUEST_TIMEOUT}秒")
+        logger.info(f"最大重试次数: {self.MAX_RETRIES}")
+
 
 # HTTP 会话类
 class HTTPSession:
@@ -109,31 +158,29 @@ class WeatherNotifier:
 
             # 构造消息内容
             message = (
-                f"🕒 时间: {current_time}\n"
-                f"🌡️ 温度: {weather_data['temperature']}°C\n"
+                f"🕒时间: {current_time}\n"
+                f"🌡️温度: {weather_data['temperature']}°C\n"
                 f"☁️ 天气: {weather_data['weather']}\n"
-                f"💧 湿度: {weather_data['humidity']}%\n"
-                f"🌪️ 风向: {weather_data['winddirection']}\n"
-                f"💨 风力: {weather_data['windpower']}"
+                f"💧湿度: {weather_data['humidity']}%\n"
+                f"🌪️风向: {weather_data['winddirection']}\n"
+                f"💨风力: {weather_data['windpower']}"
             )
 
-            # URL编码消息内容
-            encoded_message = quote(message)
-            
-            # 构造请求URL
+            # 发送消息
             url = f"{self.config.QQBOT_API_URL}/send_private_msg"
             params = {
                 'user_id': self.config.QQ_USER_ID,
-                'message': encoded_message
+                'message': message
             }
 
-            # 发送消息
             response = self.http_session.get(url, params=params)
             
             if response.status_code == 200:
-                logger.info("消息发送成功")
+                logger.info(f"消息发送成功: {message}")
+                logger.debug(f"完整响应: {response.text}")
             else:
                 logger.error(f"消息发送失败，状态码: {response.status_code}")
+                logger.error(f"响应内容: {response.text}")
 
         except Exception as e:
             logger.error(f"发送消息时发生错误: {str(e)}")

@@ -1,17 +1,5 @@
-# HTTP 请求库
 requests>=2.31.0
-
-# 定时任务调度
 schedule>=1.2.1
-
-# 时区处理
 pytz>=2024.1
-
-# 日志处理（Python 标准库，不需要安装）
-# logging
-
-# URL 编码（Python 标准库，不需要安装）
-# urllib
-
-# Python requests 重试机制
 urllib3>=2.2.1
+python-dotenv>=1.0.0
