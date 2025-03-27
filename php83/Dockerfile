@@ -4,7 +4,7 @@ FROM php:8.3-fpm-alpine
 # 设置工作目录
 WORKDIR /app
 
-RUN apk add --no-cache lighttpd \
+RUN apk add --no-cache nginx \
     # 运行时依赖
     libpng \
     libwebp \
@@ -50,17 +50,16 @@ RUN apk add --no-cache lighttpd \
         -e 's/post_max_size = .*/post_max_size = 100M/' \
         /usr/local/etc/php/php.ini
 
-# 配置 Lighttpd
-COPY php83/lighttpd.conf /etc/lighttpd/lighttpd.conf
-
-# 复制应用文件
+COPY php83/nginx.conf /etc/nginx/nginx.conf
+COPY php83/default /etc/nginx/sites-available/default
 COPY php83/index.php /app/index.php
-
+COPY php83/start.sh /start.sh
 # 设置权限
-RUN chown -R www-data:www-data /app
+
+RUN chmod +x /start.sh
 
 # 暴露端口
 EXPOSE 80
 
-# 启动 Lighttpd 和 PHP-FPM
-CMD ["sh", "-c", "php-fpm & lighttpd -D -f /etc/lighttpd/lighttpd.conf"]
+# 直接运行启动脚本
+CMD ["/start.sh"]
