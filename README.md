@@ -3,7 +3,7 @@ Dockerfile
 
 ## QQ weather bot
 
-仅支持gocqhttp
+仅支持nonebot2
 
 Docker run
 
@@ -25,6 +25,9 @@ docker run -d \
 |GAODE_API_KEY	|高德地图的API Key	|无（必须指定）|
 |CITY_CODE	|高德地图的城市编码（ADCode）	|110101（北京）|
 |SEND_FREQUENCY_MINUTES|发送频率（分钟）|60|
+|REQUEST_TIMEOUT|请求超时时间（秒）|10|
+|MAX_RETRIES|最大重试次数|3|
+|SEND_FREQUENCY_MINUTES|发送频率（分钟）|60|
 
 ## Wordpress use Sqlite
 
@@ -43,8 +46,10 @@ docker run -d \
 ## KMS Server
 
 ```bash 
-docker run -d -p 1688:1688 --name kms-server jkjoy/kms
+docker run -d -p 1688:1688 8080:8080 --name kms-server jkjoy/kms
 ```
+8080 端口为默认的html页面端口
+1688 端口为kms服务端口
 
 ## Typecho Use Sqlite
 
@@ -75,14 +80,14 @@ docker run -d -p 80:80 jkjoy/typecho
 
 ```bash
 mkdir data
-chown -R 82:82 ./data
+chown -R 101:101 ./data
 docker run -d -p 80:80 -v ./data:/app jkjoy/php83
 ```
 赋予本地目录权限
 
 ```bash
 mkdir data
-chown -R 82:82 ./data
+chown -R 101:101 ./data
 ```
 
 使用`docker-compose.yaml`
@@ -94,13 +99,12 @@ services:
     container_name: php83
     restart: always
     ports:
-      - '9000:80'
+      - '8080:80'
     volumes:
       - ./data:/app
 ```
 
-把`Typecho`源码放入`data`目录下
-
+自动检测`Typecho`是否安装,如果没有安装会自动从`github`拉取最新稳定版本并解压到`/app`目录下
 也可以拉取`mysql`镜像作为网站数据库,也可以使用`sqlite`.
 
 ```yaml
@@ -154,6 +158,7 @@ networks:
 ### 反向代理
 
 nginx可能需要加入
+
 ```js
     proxy_set_header X-Forwarded-Proto $scheme; 
 ```
@@ -213,4 +218,3 @@ docker run -d \
 
    - 管理界面路径是 `/pleroma/admin/#/`
    - 修改前端为 soapbox 方法：在 Settings - Frontend - Primary 中，修改 Name 为 `soapbox` Reference 为 `static`
-   - 不建议加入 Relay, 中继信息大多无用还占用数据库，你只需要关注感兴趣的用户就行
