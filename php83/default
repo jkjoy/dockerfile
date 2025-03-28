@@ -6,7 +6,6 @@ server {
     # 主要location配置，包含伪静态规则
     location / {
         index  index.php;
-        # Typecho伪静态规则
         if (!-e $request_filename) {
             rewrite ^(.*)$ /index.php$1 last;
         }
