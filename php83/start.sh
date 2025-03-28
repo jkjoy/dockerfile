@@ -34,11 +34,11 @@ else
 fi
 
 # 启动 PHP-FPM (后台运行)
-php-fpm -D
+php-fpm83 -D
 sleep 2  # 等待 PHP-FPM 启动
 
 # 检查 PHP-FPM 是否运行
-if ! pgrep "php-fpm" >/dev/null; then
+if ! pgrep "php-fpm83" >/dev/null; then
     echo "❌ PHP-FPM 启动失败！"
     exit 1
 fi
