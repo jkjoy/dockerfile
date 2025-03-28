@@ -160,7 +160,7 @@ networks:
 nginx可能需要加入
 
 ```js
-    proxy_set_header X-Forwarded-Proto $scheme; 
+proxy_set_header X-Forwarded-Proto $scheme; 
 ```
 来传递协议,避免出现协议混淆
 
@@ -196,21 +196,22 @@ docker run -d \
 
 **注意修改环境变量** 为你自己的域名和数据库地址
 
-    ```env
-    INSTANCE_NAME=Pleroma # 实例英文名称
-    DOMAIN=miantiao.me # 实例域名
-    DB_HOST=pleroma.aivencloud.com # 数据库主机地址
-    DB_PORT=28404 # 数据库端口
-    DB_NAME=pleroma # 数据库名称
-    DB_USER=avnadmin # 数据库用户名
-    DB_PASS=AVNS_password # 数据库密码
-    ```
+```env
+INSTANCE_NAME=Pleroma # 实例英文名称
+DOMAIN=miantiao.me # 实例域名
+DB_HOST=pleroma.aivencloud.com # 数据库主机地址
+DB_PORT=28404 # 数据库端口
+DB_NAME=pleroma # 数据库名称
+DB_USER=avnadmin # 数据库用户名
+DB_PASS=AVNS_password # 数据库密码
+```
 
 ### 使用云平台的 Console/Shell 功能
 
 注册你的管理员账号（Zeabur 不支持此功能建议本地/其他平台部署创建账号后再部署到 Zeabur）
-
-    `./bin/pleroma_ctl user new fakeadmin admin@test.net --admin`
+```bash
+./bin/pleroma_ctl user new fakeadmin admin@test.net --admin
+```
 
 ### 云平台绑定域名
 
