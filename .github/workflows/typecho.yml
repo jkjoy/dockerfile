@@ -4,7 +4,8 @@ on:
   push:
     branches:
       - main
-
+    paths:  # 仅当 typecho/ 目录下的文件发生更改时触发
+      - 'typecho/**'
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false

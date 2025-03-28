@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    paths:  # 仅当 weather/ 目录下的文件发生更改时触发
+      - 'weather/**'
 
 concurrency:
   group: ${{ github.workflow }}

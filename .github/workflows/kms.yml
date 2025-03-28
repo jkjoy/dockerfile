@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    paths:  # 仅当 kms/ 目录下的文件发生更改时触发
+      - 'kms/**'
 
 concurrency:
   group: ${{ github.workflow }}
