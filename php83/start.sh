@@ -26,7 +26,7 @@ if [ -z "$(ls -A $INSTALL_DIR 2>/dev/null)" ]; then
 
     # 清理和赋权
     rm -f "$ZIP_FILE"
-    chown -R www-data:www-data "$INSTALL_DIR"
+    chown -R nginx:nginx "$INSTALL_DIR"
     chmod -R 755 "$INSTALL_DIR"
     echo "✅ Typecho 安装完成！"
 else

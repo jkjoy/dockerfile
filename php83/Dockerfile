@@ -1,65 +1,56 @@
-# 使用 PHP-FPM 的 Alpine 镜像
-FROM php:8.3-fpm-alpine
+FROM nginx:stable-alpine
 
-# 设置工作目录
 WORKDIR /app
 
-RUN apk add --no-cache nginx \
-    # 运行时依赖
-    libpng \
-    libwebp \
-    libjpeg-turbo \
-    icu \
-    libzip \
-    freetype \
-    zip \
-    # 构建依赖
-    && apk add --no-cache --virtual .build-deps \
-        autoconf \
-        pkgconf \
-        make \
-        gcc \
-        libc-dev \
-        zlib-dev \
-        libpng-dev \
-        libwebp-dev \
-        libjpeg-turbo-dev \
-        icu-dev \
-        libzip-dev \
-        freetype-dev \
-    # 安装 PHP 扩展
-    && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
-    && docker-php-ext-install -j$(nproc) \
-        pdo_mysql \
-        mysqli \
-        gd \
-        intl \
-        opcache \
-        zip \
-        exif \
-    && pecl install redis \
-    && docker-php-ext-enable redis \
-       exif \
-    # 清理构建依赖
-    && apk del .build-deps \
-    && rm -rf /var/cache/apk/* /tmp/* \
-    # PHP 配置优化
-    && cp /usr/local/etc/php/php.ini-production /usr/local/etc/php/php.ini \
-    && sed -i \
-        -e 's/upload_max_filesize = .*/upload_max_filesize = 100M/' \
-        -e 's/post_max_size = .*/post_max_size = 100M/' \
-        /usr/local/etc/php/php.ini
+# Install packages
+RUN apk --no-cache add \
+    php83 \
+    php83-fpm \
+    php83-pdo \
+    php83-sqlite3 \
+    php83-zip \
+    php83-curl \
+    php83-gd \
+    php83-intl \
+    php83-xsl \
+    php83-mbstring \
+    php83-dom \
+    php83-json \
+    php83-openssl \
+    php83-pdo_sqlite \
+    php83-zlib \
+    php83-fileinfo \
+    php83-opcache \
+    php83-imap \
+    php83-exif \
+    php83-pecl-imagick \
+    php83-ctype \
+    php83-tidy \
+    php83-tokenizer \
+    php83-session \
+    php83-pdo_mysql \
+    php83-pecl-redis \
+    php83-xml \
+    php83-xmlwriter \
+    php83-xmlreader \
+    php83-xmlrpc \
+    && mkdir -p /etc/nginx/sites-enabled \
+    && rm -rf /var/cache/apk/*
 
+# Copy configuration files
 COPY php83/nginx.conf /etc/nginx/nginx.conf
+COPY php83/php.ini /etc/php83/php.ini
+COPY php83/www.conf /etc/php83/php-fpm.d/www.conf
 COPY php83/default /etc/nginx/sites-available/default
-COPY php83/index.php /app/index.php
 COPY php83/start.sh /start.sh
-# 设置权限
 
-RUN chmod +x /start.sh
 
-# 暴露端口
+# Set up permissions and symlinks in a single layer
+RUN chmod +x /start.sh \
+    && chown -R nginx:nginx /app \
+    && chmod -R 0755 /app \
+    && ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+
 EXPOSE 80
 
-# 直接运行启动脚本
 CMD ["/start.sh"]
