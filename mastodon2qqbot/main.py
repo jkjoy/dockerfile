@@ -5,12 +5,12 @@ import requests
 from html import unescape
 
 # 配置
-MASTODON_INSTANCE = os.getenv("MASTODON_INSTANCE", "https://your-instance.social")
-MASTODON_TOKEN = os.getenv("MASTODON_TOKEN", "ZTDJN2ZMZMZI5MTU1MZHH")
+MASTODON_INSTANCE = os.getenv("MASTODON_INSTANCE", "https://xxx.xxx")
+MASTODON_TOKEN = os.getenv("MASTODON_TOKEN", "xxx")
 QQ_API = os.getenv("QQ_API", "https://bot.0tz.top/send_private_msg")
 QQ_ID = os.getenv("QQ_ID", "80116747")
-CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", 300))  # 5分钟
-STATE_FILE = "/app/state.json"
+CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", 60)) 
+STATE_FILE = "./data/state.json"
 
 def load_last_id():
     if os.path.isfile(STATE_FILE):
@@ -20,6 +20,9 @@ def load_last_id():
     return "0"
 
 def save_last_id(last_id):
+    directory = os.path.dirname(STATE_FILE)
+    if directory and not os.path.exists(directory):
+        os.makedirs(directory, exist_ok=True)
     with open(STATE_FILE, "w") as f:
         json.dump({"last_notification_id": last_id}, f)
 
