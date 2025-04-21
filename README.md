@@ -219,3 +219,38 @@ DB_PASS=AVNS_password # 数据库密码
 
    - 管理界面路径是 `/pleroma/admin/#/`
    - 修改前端为 soapbox 方法：在 Settings - Frontend - Primary 中，修改 Name 为 `soapbox` Reference 为 `static`
+
+
+## Mastodon to QQBOT
+
+环境变量配置（可选）
+MASTODON_INSTANCE: Mastodon 实例地址（如 https://your-instance.social）
+MASTODON_TOKEN: Mastodon 访问令牌
+QQ_API: NoneBot QQ机器人API，默认 "https://bot.0tz.top/send_private_msg"
+QQ_ID: 目标QQ号，默认 "80116747"
+CHECK_INTERVAL: 检查间隔秒数，默认 300（5分钟）
+
+### 使用
+```bash
+docker run -d \
+  -e MASTODON_INSTANCE="https://你的mastodon实例" \
+  -e MASTODON_TOKEN="你的token" \
+  -e QQ_ID="80116747" \
+  jkjoy/mastodon2qqbot
+```
+
+或者 docker-compose.yaml
+```yaml
+services:
+  mastodon2qqbot:
+    image: jkjoy/mastodon2qqbot
+    environment:
+      QQ_API: https://bot.0tz.top/send_private_msg
+      QQ_ID: 80116747
+      MASTODON_INSTANCE: https://你的mastodon实例
+      MASTODON_TOKEN: 你的token
+      CHECK_INTERVAL: 300
+    restart: always
+    volumes:
+      - ./data:/app
+```
