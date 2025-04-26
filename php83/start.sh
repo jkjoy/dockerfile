@@ -13,15 +13,6 @@ ZIP_FILE="/tmp/typecho.zip"
 TESTORE_URL="https://jkjoy.github.io/dockerfile/php83/typecho/TeStore.zip"
 TESTORE_ZIP="/tmp/TeStore.zip"
 PLUGINS_DIR="$INSTALL_DIR/usr/plugins"
-SOCKET_DIR="/run"
-SOCKET_FILE="php-fpm83.sock"
-SOCKET_PATH="$SOCKET_DIR/$SOCKET_FILE"
-
-# 确保套接字目录存在并有正确权限
-echo "▶️ 准备套接字目录..."
-mkdir -p $SOCKET_DIR
-chown nginx:nginx $SOCKET_DIR || true
-chmod 775 $SOCKET_DIR
 
 # 检查 Typecho 是否已安装
 if [ ! -f "$INSTALL_DIR/index.php" ]; then
@@ -77,41 +68,6 @@ fi
 # 启动 PHP-FPM 并显示详细日志
 echo "▶️ 启动 PHP-FPM..."
 php-fpm83 -D
-
-# 等待套接字生成
-echo "⏳ 等待套接字生成..."
-timeout=10
-while [ ! -S "$SOCKET_PATH" ] && [ $timeout -gt 0 ]; do
-    sleep 1
-    timeout=$((timeout-1))
-    echo "等待中...剩余 $timeout 秒"
-done
-
-# 检查 PHP-FPM 进程
-if ! pgrep "php-fpm83" >/dev/null; then
-    echo "❌ PHP-FPM 进程启动失败！"
-    if [ -f "/var/log/php-fpm83/error.log" ]; then
-        echo "==== PHP-FPM 错误日志 ===="
-        tail -n 20 /var/log/php-fpm83/error.log
-        echo "========================="
-    fi
-    exit 1
-else
-    echo "✅ PHP-FPM 进程已启动 (PID: $(pgrep "php-fpm83"))"
-fi
-
-# 检查套接字文件
-if [ -S "$SOCKET_PATH" ]; then
-    echo "✅ PHP-FPM 套接字已创建: $SOCKET_PATH"
-    ls -l "$SOCKET_PATH"
-    chown nginx:nginx "$SOCKET_PATH" || true
-    chmod 660 "$SOCKET_PATH" || true
-else
-    echo "❌ PHP-FPM 套接字未生成！检查以下内容："
-    echo "1. /etc/php83/php-fpm.d/www.conf 中的 listen 路径应设置为 $SOCKET_PATH"
-    echo "2. PHP-FPM 错误日志（如 /var/log/php-fpm83/error.log）"
-    exit 1
-fi
 
 # 检查 Nginx 配置
 if ! nginx -t; then
