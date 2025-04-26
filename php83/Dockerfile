@@ -45,8 +45,6 @@ COPY php83/start.sh /start.sh
 
 # Set up permissions and symlinks in a single layer
 RUN chmod +x /start.sh \
-    && chown -R nginx:nginx /app \
-    && chmod -R 0755 /app \
     && ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
 
 EXPOSE 80
