@@ -5,7 +5,7 @@ set -e  # 遇到错误立即退出
 TYPECHO_URL="https://github.com/typecho/typecho/releases/latest/download/typecho.zip"
 INSTALL_DIR="/app"
 ZIP_FILE="/tmp/typecho.zip"
-TESTORE_URL="https://jkjoy.github.io/dockerfile/php83/typecho/TeStore-1.1.6.zip"
+TESTORE_URL="https://jkjoy.github.io/dockerfile/php83/typecho/TeStore.zip"
 TESTORE_ZIP="/tmp/TeStore.zip"
 PLUGINS_DIR="$INSTALL_DIR/usr/plugins"
 
