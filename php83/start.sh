@@ -53,16 +53,28 @@ else
     echo "检测到 /app 中已存在 index.php，跳过安装"
 fi
 
-# 启动 PHP-FPM (后台运行)
+# 启动 PHP-FPM 并显示详细日志
+echo "▶️ 启动 PHP-FPM..."
 php-fpm83 -D
-sleep 2  # 等待 PHP-FPM 启动
 
-# 检查 PHP-FPM 是否运行
+# 检查进程是否存在
 if ! pgrep "php-fpm83" >/dev/null; then
-    echo "❌ PHP-FPM 启动失败！"
+    echo "❌ PHP-FPM 进程启动失败！"
+    exit 1
+else
+    echo "✅ PHP-FPM 进程已启动 (PID: $(pgrep "php-fpm83"))"
+fi
+
+# 检查套接字文件（如果是 Unix Socket）
+SOCKET_PATH="/var/run/php83-fpm.sock"
+if [ -S "$SOCKET_PATH" ]; then
+    echo "✅ PHP-FPM 套接字已创建: $SOCKET_PATH"
+    ls -l "$SOCKET_PATH"
+else
+    echo "❌ PHP-FPM 套接字未生成！检查配置中的 listen 路径"
     exit 1
 fi
 
-# 启动 Nginx (前台运行)
-echo "启动 Nginx..."
-nginx -g "daemon off;"
+# 启动 Nginx
+echo "▶️ 启动 Nginx..."
+exec nginx -g "daemon off;"
