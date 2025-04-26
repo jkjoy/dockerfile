@@ -3,7 +3,6 @@ server {
     server_name  _;
     root   /app;
     
-    # 主要location配置，包含伪静态规则
     location / {
         index  index.php;
         if (!-e $request_filename) {
@@ -12,7 +11,6 @@ server {
         autoindex off;
     }
 
-    # PHP文件处理
     location ~ [^/]\.php(/|$) {
         fastcgi_buffer_size 128k;
         fastcgi_buffers 256 16k;
@@ -20,7 +18,7 @@ server {
         fastcgi_temp_file_write_size 256k;
         fastcgi_read_timeout 240;
         fastcgi_split_path_info ^(.+\.php)(/.+)$;
-        fastcgi_pass unix:/run/php-fpm83.sock;  
+        fastcgi_pass unix:/var/run/php-fpm83.sock;  
         fastcgi_index index.php;
         if (!-f $document_root$fastcgi_script_name) {
             return 404;
@@ -29,13 +27,11 @@ server {
         include fastcgi_params;
     }
 
-    # 禁止访问隐藏文件
     location ~ /\. {       
         deny all; 
         access_log off;   
         log_not_found off;
     }
 
-    # 全局设置
     log_not_found off;
 }
