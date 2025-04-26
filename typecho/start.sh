@@ -51,6 +51,11 @@ log_msg "Creating symbolic links..."
 ln -sfn "$DATA_DIR/" "$USR_DIR/"
 ln -sfn "$CONFIG_FILE" "/app/config.inc.php"
 
+# Set permissions for data directory
+log_msg "Setting permissions for data directory..."
+chown -R nginx:nginx "$DATA_DIR"
+chmod 755 "$DATA_DIR"
+
 # Start services
 log_msg "Starting PHP-FPM and Nginx..."
 php-fpm83 -D

@@ -66,7 +66,7 @@ else
 fi
 
 # 检查套接字文件（如果是 Unix Socket）
-SOCKET_PATH="/var/run/php83-fpm.sock"
+SOCKET_PATH="/run/php83-fpm.sock"
 if [ -S "$SOCKET_PATH" ]; then
     echo "✅ PHP-FPM 套接字已创建: $SOCKET_PATH"
     ls -l "$SOCKET_PATH"
