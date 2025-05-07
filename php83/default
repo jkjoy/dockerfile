@@ -27,11 +27,5 @@ server {
         include fastcgi_params;
     }
 
-    location ~ /\. {       
-        deny all; 
-        access_log off;   
-        log_not_found off;
-    }
-
     log_not_found off;
 }
