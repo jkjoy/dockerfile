@@ -36,7 +36,7 @@ func initDBs() error {
 	// 初始化MaxMind City数据库
 	cityPath := os.Getenv("CITY_DB_PATH")
 	if cityPath == "" {
-		cityPath = "./GeoLite2-City.mmdb"
+		cityPath = "./data/GeoLite2-City.mmdb"
 	}
 
 	var err error
@@ -48,7 +48,7 @@ func initDBs() error {
 	// 初始化MaxMind ASN数据库
 	asnPath := os.Getenv("ASN_DB_PATH")
 	if asnPath == "" {
-		asnPath = "./GeoLite2-ASN.mmdb"
+		asnPath = "./data/GeoLite2-ASN.mmdb"
 	}
 
 	asnDB, err = geoip2.Open(asnPath)
@@ -59,7 +59,7 @@ func initDBs() error {
 	// 初始化纯真IP库
 	qqwryPath := os.Getenv("QQWRY_PATH")
 	if qqwryPath == "" {
-		qqwryPath = "./qqwry.dat"
+		qqwryPath = "./data/qqwry.dat"
 	}
 
 	qqwryDB = qqwry.NewQQwry(qqwryPath)
