@@ -8,7 +8,7 @@ COPY go.mod ./
 RUN go mod download
 
 # 复制源代码
-COPY . .
+COPY ip/. .
 
 # 构建可执行文件
 RUN go build -o ipserver main.go
@@ -20,7 +20,7 @@ WORKDIR /app
 
 # 拷贝可执行文件和数据文件
 COPY --from=builder /app/ipserver .
-COPY data ./data
+COPY ip/data ./data
 
 EXPOSE 8080
 
