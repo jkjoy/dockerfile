@@ -7,7 +7,7 @@ WORKDIR /app
 RUN apk add --no-cache git make
 
 # 复制源码
-COPY ./ip .
+COPY . .
 
 # 下载依赖并构建
 RUN go mod download
@@ -31,6 +31,8 @@ ENV PORT=8080
 RUN mkdir -p /data && \
     chown nobody:nobody /data && \
     chmod 755 /data
+
+COPY /ip/data /app/data
 
 # 切换到非root用户
 USER nobody
