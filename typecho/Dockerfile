@@ -32,6 +32,7 @@ RUN apk --no-cache add \
     php83-tidy \
     php83-tokenizer \
     php83-session \
+    php83-iconv \
     && mkdir -p /etc/nginx/sites-enabled \
     && rm -rf /var/cache/apk/*
 
