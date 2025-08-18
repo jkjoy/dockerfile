@@ -3,8 +3,21 @@ set -e  # 遇到错误立即退出
 
 # 日志文件
 LOG_FILE="/var/log/setup.log"
-mkdir -p "$(dirname $LOG_FILE)"
-exec > >(tee -i $LOG_FILE) 2>&1
+LOG_DIR="$(dirname $LOG_FILE)"
+
+# 确保日志目录存在并有正确权限
+mkdir -p "$LOG_DIR"
+chown nginx:nginx "$LOG_DIR" || true
+chmod 755 "$LOG_DIR" || true
+
+# 初始化日志文件
+touch "$LOG_FILE" || { echo "❌ 无法创建日志文件 $LOG_FILE"; exit 1; }
+chown nginx:nginx "$LOG_FILE" || true
+chmod 644 "$LOG_FILE" || true
+
+# 重定向输出到日志文件
+exec > >(tee -a "$LOG_FILE") 2>&1
+echo "📅 脚本启动时间: $(date)"
 
 # 定义变量
 TYPECHO_URLS=(
@@ -25,8 +38,8 @@ THEME_URLS=(
 INSTALL_DIR="/app"
 TYPECHO_TMPFILE="/tmp/typecho.zip"
 TESTORE_ZIP="/tmp/TeStore.zip"
-PLUGINS_DIR="$INSTALL_DIR/usr/plugins"
 THEME_FILE="/tmp/farallon.zip"
+PLUGINS_DIR="$INSTALL_DIR/usr/plugins"
 THEME_DIR="$INSTALL_DIR/usr/themes/farallon"
 
 # 下载函数，带重试机制
@@ -37,7 +50,7 @@ download_file() {
 
     for url in "${urls[@]}"; do
         echo "尝试从 $url 下载..."
-        if curl -sSL --connect-timeout 10 --retry 2 "$url" -o "$output_file"; then
+        if curl -sSL --connect-timeout 10 --retry 3 --retry-delay 2 "$url" -o "$output_file"; then
             echo "✅ 下载成功！"
             return 0
         else
@@ -48,14 +61,27 @@ download_file() {
     return 1
 }
 
+# 检查并清理临时文件
+cleanup_temp_files() {
+    echo "清理临时文件..."
+    rm -f "$TYPECHO_TMPFILE" "$TESTORE_ZIP" "$THEME_FILE" || true
+    echo "✅ 临时文件清理完成"
+}
+
 # 检查 Typecho 是否已安装
 if [ ! -f "$INSTALL_DIR/index.php" ]; then
     echo "检测到 /app 中没有 index.php，开始安装 Typecho..."
+
+    # 确保安装目录存在
+    mkdir -p "$INSTALL_DIR" || { echo "❌ 无法创建安装目录 $INSTALL_DIR"; exit 1; }
+    chown nginx:nginx "$INSTALL_DIR" || true
+    chmod 755 "$INSTALL_DIR" || true
 
     # 下载 Typecho
     echo "正在下载 Typecho..."
     if ! download_file "${TYPECHO_URLS[@]}" "$TYPECHO_TMPFILE"; then
         echo "❌ Typecho 下载失败！请检查网络或URL"
+        cleanup_temp_files
         exit 1
     fi
 
@@ -63,6 +89,7 @@ if [ ! -f "$INSTALL_DIR/index.php" ]; then
     echo "解压 Typecho..."
     if ! unzip -q "$TYPECHO_TMPFILE" -d "$INSTALL_DIR"; then
         echo "❌ Typecho 解压失败！请检查ZIP文件完整性"
+        cleanup_temp_files
         exit 1
     fi
 
@@ -71,7 +98,7 @@ if [ ! -f "$INSTALL_DIR/index.php" ]; then
     if ! download_file "${TESTORE_URLS[@]}" "$TESTORE_ZIP"; then
         echo "⚠️ TeStore 插件下载失败，跳过安装"
     else
-        mkdir -p "$PLUGINS_DIR"
+        mkdir -p "$PLUGINS_DIR" || { echo "❌ 无法创建插件目录 $PLUGINS_DIR"; exit 1; }
         echo "解压 TeStore 插件..."
         if unzip -q "$TESTORE_ZIP" -d "$PLUGINS_DIR"; then
             echo "✅ TeStore 插件安装完成！"
@@ -85,7 +112,7 @@ if [ ! -f "$INSTALL_DIR/index.php" ]; then
     if ! download_file "${THEME_URLS[@]}" "$THEME_FILE"; then
         echo "⚠️ Farallon 主题下载失败，跳过安装"
     else
-        mkdir -p "$THEME_DIR"
+        mkdir -p "$THEME_DIR" || { echo "❌ 无法创建主题目录 $THEME_DIR"; exit 1; }
         echo "解压 Farallon 主题..."
         if unzip -q "$THEME_FILE" -d "$THEME_DIR"; then
             echo "✅ Farallon 主题安装完成！"
@@ -94,37 +121,53 @@ if [ ! -f "$INSTALL_DIR/index.php" ]; then
         fi
     fi
 
-    # 清理和赋权
-    rm -f "$TYPECHO_TMPFILE" "$TESTORE_ZIP" "$THEME_FILE"
-    chown -R nginx:nginx "$INSTALL_DIR" || true
-    chmod -R 755 "$INSTALL_DIR" || true
-    echo "✅ Typecho 及插件安装完成！"
+    # 清理临时文件
+    cleanup_temp_files
+
+    # 赋权
+    echo "设置安装目录权限..."
+    chown -R nginx:nginx "$INSTALL_DIR" || { echo "⚠️ 赋权失败，但继续执行"; }
+    chmod -R 755 "$INSTALL_DIR" || { echo "⚠️ 设置权限失败，但继续执行"; }
+    echo "✅ Typecho 及插件/主题安装完成！"
 else
     echo "检测到 /app 中已存在 index.php，跳过安装"
 fi
 
-# 赋权
-chown -R nginx:nginx "$INSTALL_DIR" || true
-chmod -R 755 "$INSTALL_DIR" || true
+# 再次确保权限
+echo "确保安装目录权限..."
+chown -R nginx:nginx "$INSTALL_DIR" || { echo "⚠️ 赋权失败，但继续执行"; }
+chmod -R 755 "$INSTALL_DIR" || { echo "⚠️ 设置权限失败，但继续执行"; }
 
 # 检查 PHP-FPM 配置
+echo "检查 PHP-FPM 配置..."
 if ! php-fpm83 -t; then
     echo "❌ PHP-FPM 配置测试失败！"
+    cat /var/log/php-fpm.log || echo "⚠️ 无法读取 PHP-FPM 日志"
+    cleanup_temp_files
     exit 1
 fi
+echo "✅ PHP-FPM 配置测试通过"
 
-# 启动 PHP-FPM 并显示详细日志
+# 启动 PHP-FPM
 echo "▶️ 启动 PHP-FPM..."
-php-fpm83 -D
+if ! php-fpm83 -D; then
+    echo "❌ PHP-FPM 启动失败！"
+    cat /var/log/php-fpm.log || echo "⚠️ 无法读取 PHP-FPM 日志"
+    cleanup_temp_files
+    exit 1
+fi
+echo "✅ PHP-FPM 启动成功"
 
 # 检查 Nginx 配置
+echo "检查 Nginx 配置..."
 if ! nginx -t; then
-    echo "❌ Nginx 配置测试失败！请检查 Nginx 配置文件"
-    nginx -t
+    echo "❌ Nginx 配置测试失败！"
+    nginx -t 2>>"$LOG_FILE" || true
+    cleanup_temp_files
     exit 1
 fi
 echo "✅ Nginx 配置测试通过"
 
 # 启动 Nginx
 echo "▶️ 启动 Nginx..."
-exec nginx -g "daemon off;"
+exec nginx -g "daemon off;" || { echo "❌ Nginx 启动失败！"; cat /var/log/nginx/error.log || echo "⚠️ 无法读取 Nginx 错误日志"; exit 1; }
