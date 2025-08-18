@@ -7,12 +7,46 @@ mkdir -p "$(dirname $LOG_FILE)"
 exec > >(tee -i $LOG_FILE) 2>&1
 
 # 定义变量
-TYPECHO_URL="https://github.com/typecho/typecho/releases/latest/download/typecho.zip"
+TYPECHO_URLS=(
+    "https://github.com/typecho/typecho/releases/latest/download/typecho.zip"
+    "https://typecho.org/downloads/typecho.zip"
+    "https://gh.ods.ee/https://github.com/typecho/typecho/releases/latest/download/typecho.zip"
+)
+TESTORE_URLS=(
+    "https://gh.ods.ee/https://jkjoy.github.io/dockerfile/php83/typecho/TeStore.zip"
+    "https://cdn.jsdelivr.net/gh/jkjoy/dockerfile/php83/typecho/TeStore.zip"
+    "https://jkjoy.github.io/dockerfile/php83/typecho/TeStore.zip"
+)
+THEME_URLS=(
+    "https://github.com/jkjoy/typecho-theme-farallon/releases/download/0.8.0/farallon.zip"
+    "https://cdn.jsdelivr.net/gh/jkjoy/dockerfile/php83/typecho/farallon.zip"
+    "https://gh.ods.ee/https://github.com/jkjoy/typecho-theme-farallon/releases/download/0.8.0/farallon.zip"
+)
 INSTALL_DIR="/app"
-ZIP_FILE="/tmp/typecho.zip"
-TESTORE_URL="https://jkjoy.github.io/dockerfile/php83/typecho/TeStore.zip"
+TYPECHO_TMPFILE="/tmp/typecho.zip"
 TESTORE_ZIP="/tmp/TeStore.zip"
 PLUGINS_DIR="$INSTALL_DIR/usr/plugins"
+THEME_FILE="/tmp/farallon.zip"
+THEME_DIR="$INSTALL_DIR/usr/themes/farallon"
+
+# 下载函数，带重试机制
+download_file() {
+    local urls=("$@")
+    local output_file="${urls[-1]}"
+    unset 'urls[${#urls[@]}-1]'  # 移除最后一个元素（输出文件路径）
+
+    for url in "${urls[@]}"; do
+        echo "尝试从 $url 下载..."
+        if curl -sSL --connect-timeout 10 --retry 2 "$url" -o "$output_file"; then
+            echo "✅ 下载成功！"
+            return 0
+        else
+            echo "⚠️ 从 $url 下载失败，尝试下一个地址..."
+        fi
+    done
+    echo "❌ 所有下载地址均失败！"
+    return 1
+}
 
 # 检查 Typecho 是否已安装
 if [ ! -f "$INSTALL_DIR/index.php" ]; then
@@ -20,21 +54,21 @@ if [ ! -f "$INSTALL_DIR/index.php" ]; then
 
     # 下载 Typecho
     echo "正在下载 Typecho..."
-    if ! curl -sSL "$TYPECHO_URL" -o "$ZIP_FILE"; then
-        echo "❌ Typecho 下载失败！请检查网络或URL: $TYPECHO_URL"
+    if ! download_file "${TYPECHO_URLS[@]}" "$TYPECHO_TMPFILE"; then
+        echo "❌ Typecho 下载失败！请检查网络或URL"
         exit 1
     fi
 
     # 解压 Typecho
     echo "解压 Typecho..."
-    if ! unzip -q "$ZIP_FILE" -d "$INSTALL_DIR"; then
+    if ! unzip -q "$TYPECHO_TMPFILE" -d "$INSTALL_DIR"; then
         echo "❌ Typecho 解压失败！请检查ZIP文件完整性"
         exit 1
     fi
 
     # 下载 TeStore 插件
     echo "下载 TeStore 插件..."
-    if ! curl -sSL "$TESTORE_URL" -o "$TESTORE_ZIP"; then
+    if ! download_file "${TESTORE_URLS[@]}" "$TESTORE_ZIP"; then
         echo "⚠️ TeStore 插件下载失败，跳过安装"
     else
         mkdir -p "$PLUGINS_DIR"
@@ -46,8 +80,22 @@ if [ ! -f "$INSTALL_DIR/index.php" ]; then
         fi
     fi
 
+    # 下载并安装 Farallon 主题
+    echo "下载 Farallon 主题..."
+    if ! download_file "${THEME_URLS[@]}" "$THEME_FILE"; then
+        echo "⚠️ Farallon 主题下载失败，跳过安装"
+    else
+        mkdir -p "$THEME_DIR"
+        echo "解压 Farallon 主题..."
+        if unzip -q "$THEME_FILE" -d "$THEME_DIR"; then
+            echo "✅ Farallon 主题安装完成！"
+        else
+            echo "⚠️ Farallon 主题解压失败，跳过安装"
+        fi
+    fi
+
     # 清理和赋权
-    rm -f "$ZIP_FILE" "$TESTORE_ZIP"
+    rm -f "$TYPECHO_TMPFILE" "$TESTORE_ZIP" "$THEME_FILE"
     chown -R nginx:nginx "$INSTALL_DIR" || true
     chmod -R 755 "$INSTALL_DIR" || true
     echo "✅ Typecho 及插件安装完成！"
