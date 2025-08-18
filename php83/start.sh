@@ -19,22 +19,10 @@ chmod 644 "$LOG_FILE" || true
 exec > >(tee -a "$LOG_FILE") 2>&1
 echo "📅 脚本启动时间: $(date)"
 
-# 定义变量
-TYPECHO_URLS=(
-    "https://github.com/typecho/typecho/releases/latest/download/typecho.zip"
-    "https://typecho.org/downloads/typecho.zip"
-    "https://gh.ods.ee/https://github.com/typecho/typecho/releases/latest/download/typecho.zip"
-)
-TESTORE_URLS=(
-    "https://gh.ods.ee/https://jkjoy.github.io/dockerfile/php83/typecho/TeStore.zip"
-    "https://cdn.jsdelivr.net/gh/jkjoy/dockerfile/php83/typecho/TeStore.zip"
-    "https://jkjoy.github.io/dockerfile/php83/typecho/TeStore.zip"
-)
-THEME_URLS=(
-    "https://github.com/jkjoy/typecho-theme-farallon/releases/download/0.8.0/farallon.zip"
-    "https://cdn.jsdelivr.net/gh/jkjoy/dockerfile/php83/typecho/farallon.zip"
-    "https://gh.ods.ee/https://github.com/jkjoy/typecho-theme-farallon/releases/download/0.8.0/farallon.zip"
-)
+# 定义变量（使用空格分隔的字符串代替数组）
+TYPECHO_URLS="https://github.com/typecho/typecho/releases/latest/download/typecho.zip https://typecho.org/downloads/typecho.zip https://gh.ods.ee/https://github.com/typecho/typecho/releases/latest/download/typecho.zip"
+TESTORE_URLS="https://gh.ods.ee/https://jkjoy.github.io/dockerfile/php83/typecho/TeStore.zip https://cdn.jsdelivr.net/gh/jkjoy/dockerfile/php83/typecho/TeStore.zip https://jkjoy.github.io/dockerfile/php83/typecho/TeStore.zip"
+THEME_URLS="https://github.com/jkjoy/typecho-theme-farallon/releases/download/0.8.0/farallon.zip https://cdn.jsdelivr.net/gh/jkjoy/dockerfile/php83/typecho/farallon.zip https://gh.ods.ee/https://github.com/jkjoy/typecho-theme-farallon/releases/download/0.8.0/farallon.zip"
 INSTALL_DIR="/app"
 TYPECHO_TMPFILE="/tmp/typecho.zip"
 TESTORE_ZIP="/tmp/TeStore.zip"
@@ -44,11 +32,10 @@ THEME_DIR="$INSTALL_DIR/usr/themes/farallon"
 
 # 下载函数，带重试机制
 download_file() {
-    local urls=("$@")
-    local output_file="${urls[-1]}"
-    unset 'urls[${#urls[@]}-1]'  # 移除最后一个元素（输出文件路径）
+    urls="$1"
+    output_file="$2"
 
-    for url in "${urls[@]}"; do
+    for url in $urls; do
         echo "尝试从 $url 下载..."
         if curl -sSL --connect-timeout 10 --retry 3 --retry-delay 2 "$url" -o "$output_file"; then
             echo "✅ 下载成功！"
@@ -79,7 +66,7 @@ if [ ! -f "$INSTALL_DIR/index.php" ]; then
 
     # 下载 Typecho
     echo "正在下载 Typecho..."
-    if ! download_file "${TYPECHO_URLS[@]}" "$TYPECHO_TMPFILE"; then
+    if ! download_file "$TYPECHO_URLS" "$TYPECHO_TMPFILE"; then
         echo "❌ Typecho 下载失败！请检查网络或URL"
         cleanup_temp_files
         exit 1
@@ -95,7 +82,7 @@ if [ ! -f "$INSTALL_DIR/index.php" ]; then
 
     # 下载 TeStore 插件
     echo "下载 TeStore 插件..."
-    if ! download_file "${TESTORE_URLS[@]}" "$TESTORE_ZIP"; then
+    if ! download_file "$TESTORE_URLS" "$TESTORE_ZIP"; then
         echo "⚠️ TeStore 插件下载失败，跳过安装"
     else
         mkdir -p "$PLUGINS_DIR" || { echo "❌ 无法创建插件目录 $PLUGINS_DIR"; exit 1; }
@@ -109,7 +96,7 @@ if [ ! -f "$INSTALL_DIR/index.php" ]; then
 
     # 下载并安装 Farallon 主题
     echo "下载 Farallon 主题..."
-    if ! download_file "${THEME_URLS[@]}" "$THEME_FILE"; then
+    if ! download_file "$THEME_URLS" "$THEME_FILE"; then
         echo "⚠️ Farallon 主题下载失败，跳过安装"
     else
         mkdir -p "$THEME_DIR" || { echo "❌ 无法创建主题目录 $THEME_DIR"; exit 1; }
