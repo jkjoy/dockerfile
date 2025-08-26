@@ -20,15 +20,15 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 echo "📅 脚本启动时间: $(date)"
 
 # 定义变量（使用空格分隔的字符串代替数组）
-TYPECHO_URLS="https://github.com/typecho/typecho/releases/latest/download/typecho.zip https://typecho.org/downloads/typecho.zip https://gh.ods.ee/https://github.com/typecho/typecho/releases/latest/download/typecho.zip"
+TYPECHO_URLS="https://jkjoy.github.io/dockerfile/php83/typecho/typecho.zip https://github.com/typecho/typecho/releases/latest/download/typecho.zip https://typecho.org/downloads/typecho.zip https://gh.ods.ee/https://github.com/typecho/typecho/releases/latest/download/typecho.zip"
 TESTORE_URLS="https://jkjoy.github.io/dockerfile/php83/typecho/TeStore.zip https://cdn.jsdelivr.net/gh/jkjoy/dockerfile/php83/typecho/TeStore.zip"
-THEME_URLS="https://github.com/jkjoy/typecho-theme-farallon/releases/download/0.8.0/farallon.zip https://cdn.jsdelivr.net/gh/jkjoy/dockerfile/php83/typecho/farallon.zip https://gh.ods.ee/https://github.com/jkjoy/typecho-theme-farallon/releases/download/0.8.0/farallon.zip"
+THEME_URLS="https://jkjoy.github.io/dockerfile/php83/typecho/farallon.zip https://cdn.jsdelivr.net/gh/jkjoy/dockerfile/php83/typecho/farallon.zip https://gh.ods.ee/https://github.com/jkjoy/typecho-theme-farallon/releases/download/0.8.0/farallon.zip https://github.com/jkjoy/typecho-theme-farallon/releases/download/0.8.0/farallon.zip"
 INSTALL_DIR="/app"
 TYPECHO_TMPFILE="/tmp/typecho.zip"
 TESTORE_ZIP="/tmp/TeStore.zip"
 THEME_FILE="/tmp/farallon.zip"
 PLUGINS_DIR="$INSTALL_DIR/usr/plugins"
-THEME_DIR="$INSTALL_DIR/usr/themes/farallon"
+THEME_DIR="$INSTALL_DIR/usr/themes"
 
 # 下载函数，带重试机制
 download_file() {
