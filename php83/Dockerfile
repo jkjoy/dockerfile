@@ -8,7 +8,7 @@ RUN apk --no-cache add \
     php83-fpm \
     php83-pdo \
     php83-sqlite3 \
-    php83-pdo_postgresql \
+    php83-pdo_pgsql \
     php83-zip \
     php83-curl \
     php83-gd \
