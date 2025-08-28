@@ -32,6 +32,9 @@ RUN apk --no-cache add \
     php83-pdo_mysql \
     php83-pecl-redis \
     php83-xml \
+    php83-xmlwriter \
+    php83-xmlreader \
+    php83-simplexml \
     php83-iconv \
     && mkdir -p /etc/nginx/sites-enabled \
     && rm -rf /var/cache/apk/*
