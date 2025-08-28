@@ -35,16 +35,7 @@ download_file() {
         echo "尝试从 $url 下载..."
         ...
     done
-}        if curl -fSL "$url" -o "$output_file"; then
-            echo "✅ 下载成功: $url"
-            return 0
-        else
-            echo "⚠️ 下载失败: $url"
-        fi
-    done
-
-    return 1  # 所有URL均失败
-}
+}       
 
 # 检查 Hadsky 是否已安装
 if [ ! -f "$INSTALL_DIR/index.php" ]; then
