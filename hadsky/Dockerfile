@@ -37,11 +37,11 @@ RUN apk --no-cache add \
     && rm -rf /var/cache/apk/*
 
 # Copy configuration files
-COPY php83/nginx.conf /etc/nginx/nginx.conf
-COPY php83/php.ini /etc/php83/php.ini
-COPY php83/www.conf /etc/php83/php-fpm.d/www.conf
-COPY php83/default /etc/nginx/sites-available/default
-COPY php83/start.sh /start.sh
+COPY hadsky/nginx.conf /etc/nginx/nginx.conf
+COPY hadsky/php.ini /etc/php83/php.ini
+COPY hadsky/www.conf /etc/php83/php-fpm.d/www.conf
+COPY hadsky/default /etc/nginx/sites-available/default
+COPY hadsky/start.sh /start.sh
 
 
 # Set up permissions and symlinks in a single layer
