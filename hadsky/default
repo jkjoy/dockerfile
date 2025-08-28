@@ -1,0 +1,68 @@
+server {
+    listen 80;
+    server_name _;
+    root /app;
+    charset utf-8;
+
+    access_log off;
+    log_not_found off;
+
+    index index.php;
+
+    # ---------- HS 系统伪静态规则 ----------
+    # 列表
+    rewrite ^/list-([0-9]+)-([0-9]+)\.html$          /index.php?c=list&sortid=$1&page=$2 last;
+    rewrite ^/list-high-([0-9]+)-([0-9]+)\.html$      /index.php?c=list&type=high&sortid=$1&page=$2 last;
+
+    # 用户
+    rewrite ^/user-([0-9]+)\.html$                    /index.php?c=user&id=$1 last;
+    rewrite ^/user-([0-9]+)-([0-9]+)\.html$           /index.php?c=user&id=$1&page=$2 last;
+
+    # 论坛
+    rewrite ^/forum-([0-9]+)\.html$                   /index.php?c=forum&id=$1 last;
+
+    # 个人中心
+    rewrite ^/center-([0-9]+)\.html$                  /index.php?c=center&uid=$1 last;
+    rewrite ^/center-([0-9]+)-([0-9]+)\.html$         /index.php?c=center&uid=$1&page=$2 last;
+
+    # 阅读
+    rewrite ^/read-([0-9]+)-([0-9]+)\.html$           /index.php?c=read&id=$1&page=$2 last;
+
+    # 应用/插件
+    rewrite ^/app-([0-9a-zA-Z_]+)-([0-9a-zA-Z_]+)\.html$ /index.php?c=app&a=$1:$2 last;
+    rewrite ^/downfile-([0-9]+)\.html$                /index.php?c=app&a=puyuetianeditor:index&s=showfile&id=$1 last;
+
+    # 单页
+    rewrite ^/([a-zA-Z][0-9a-zA-Z_]+)\.html$          /index.php?c=$1 last;
+
+    # 标签
+    rewrite ^/label-(.*)\.html$                       /index.php?c=list&label=$1 last;
+
+    # 搜索
+    rewrite ^/search-(.*)-([0-9]+)\.html$             /index.php?c=app&a=puyuetian_search&w=$1&page=$2 last;
+
+    # ---------- 安全限制 ----------
+    location ~* ^/logs/  { deny all; }
+    location ~* \.hst$   { deny all; }
+
+    # ---------- 默认回退 ----------
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    # ---------- PHP 处理 ----------
+    location ~ [^/]\.php(/|$) {
+        fastcgi_pass            unix:{{PHP_SOCK}};
+        fastcgi_index           index.php;
+        fastcgi_split_path_info ^(.+\.php)(/.+)$;
+
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+
+        fastcgi_buffer_size        128k;
+        fastcgi_buffers            256 16k;
+        fastcgi_busy_buffers_size  256k;
+        fastcgi_temp_file_write_size 256k;
+        fastcgi_read_timeout       240;
+    }
+}
