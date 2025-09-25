@@ -113,8 +113,8 @@ if [ ! -f "$INSTALL_DIR/index.php" ]; then
 
     # 赋权
     echo "设置安装目录权限..."
-    chown -R nginx:nginx "$INSTALL_DIR" || { echo "⚠️ 赋权失败，但继续执行"; }
-    chmod -R 755 "$INSTALL_DIR" || { echo "⚠️ 设置权限失败，但继续执行"; }
+    chown -R nginx:nginx /app || { echo "⚠️ 赋权失败，但继续执行"; }
+    chmod -R 755 /app || { echo "⚠️ 设置权限失败，但继续执行"; }
     echo "✅ Typecho 及插件/主题安装完成！"
 else
     echo "检测到 /app 中已存在 index.php，跳过安装"
@@ -122,8 +122,8 @@ fi
 
 # 再次确保权限
 echo "确保安装目录权限..."
-chown -R nginx:nginx "$INSTALL_DIR" || { echo "⚠️ 赋权失败，但继续执行"; }
-chmod -R 755 "$INSTALL_DIR" || { echo "⚠️ 设置权限失败，但继续执行"; }
+chown -R nginx:nginx /app || { echo "⚠️ 赋权失败，但继续执行"; }
+chmod -R 755 /app || { echo "⚠️ 设置权限失败，但继续执行"; }
 
 # 检查 PHP-FPM 配置
 echo "检查 PHP-FPM 配置..."
