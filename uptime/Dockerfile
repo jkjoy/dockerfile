@@ -7,7 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /app
 
 # 安装系统依赖（如果需要）
-RUN apk add --no-cache build-base
+#RUN apk add --no-cache build-base
 
 # 复制文件
 COPY uptime/requirements.txt /app/
