@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env sh
 set -e
 
 # 将容器启动时间写入文件，供 /uptime 的 container_uptime 使用
