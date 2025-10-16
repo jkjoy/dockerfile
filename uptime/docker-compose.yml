@@ -1,0 +1,12 @@
+version: "3.8"
+services:
+  uptime-cert:
+    build: .
+    image: uptime-cert:latest
+    container_name: uptime-cert
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    # 可在这里添加环境变量/限制 CPU memory 等
+    # environment:
+    #   - TZ=UTC
