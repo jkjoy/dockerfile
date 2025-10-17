@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>系统监控服务</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .card h2 {
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .uptime-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .uptime-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .uptime-item h3 {
+            color: #667eea;
+            font-size: 1.1em;
+            margin-bottom: 10px;
+        }
+
+        .uptime-item .label {
+            color: #666;
+            font-size: 0.9em;
+            margin-top: 8px;
+        }
+
+        .uptime-item .value {
+            color: #333;
+            font-size: 1.1em;
+            font-weight: 500;
+            margin-top: 4px;
+        }
+
+        .query-section {
+            margin-top: 20px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .input-group input {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background 0.3s;
+        }
+
+        .btn:hover {
+            background: #5568d3;
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .result {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .result pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.6;
+        }
+
+        .loading {
+            display: none;
+            color: #667eea;
+            margin-top: 10px;
+        }
+
+        .error {
+            color: #e74c3c;
+            padding: 10px;
+            background: #ffeaea;
+            border-radius: 6px;
+            margin-top: 10px;
+        }
+
+        .success {
+            color: #27ae60;
+        }
+
+        .warning {
+            color: #f39c12;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #666;
+        }
+
+        .info-value {
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>系统监控服务</h1>
+            <p>服务器运行时间 · SSL证书查询 · WHOIS查询</p>
+        </div>
+
+        <!-- Uptime Card -->
+        <div class="card">
+            <h2>运行时间监控</h2>
+            <div class="uptime-grid" id="uptimeGrid">
+                <div style="text-align: center; color: #999;">加载中...</div>
+            </div>
+        </div>
+
+        <!-- Certificate Query Card -->
+        <div class="card">
+            <h2>SSL证书查询</h2>
+            <div class="query-section">
+                <div class="input-group">
+                    <input type="text" id="certHost" placeholder="输入域名，例如: google.com 或 google.com:443" />
+                    <button class="btn" onclick="queryCert()">查询证书</button>
+                </div>
+                <div class="loading" id="certLoading">查询中...</div>
+                <div id="certResult"></div>
+            </div>
+        </div>
+
+        <!-- WHOIS Query Card -->
+        <div class="card">
+            <h2>WHOIS域名查询</h2>
+            <div class="query-section">
+                <div class="input-group">
+                    <input type="text" id="whoisDomain" placeholder="输入域名，例如: google.com" />
+                    <button class="btn" onclick="queryWhois()">查询WHOIS</button>
+                </div>
+                <div class="loading" id="whoisLoading">查询中...</div>
+                <div id="whoisResult"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Load uptime on page load
+        async function loadUptime() {
+            try {
+                const response = await fetch('/uptime');
+                const data = await response.json();
+
+                let html = '';
+
+                // Host uptime
+                if (data.host_uptime && data.host_uptime.boot_time) {
+                    html += `
+                        <div class="uptime-item">
+                            <h3>宿主机运行时间</h3>
+                            <div class="label">启动时间</div>
+                            <div class="value">${data.host_uptime.boot_time_str}</div>
+                            <div class="label">运行时长</div>
+                            <div class="value">${data.host_uptime.uptime_str}</div>
+                        </div>
+                    `;
+                }
+
+                // Container uptime
+                if (data.container_uptime && data.container_uptime.boot_time) {
+                    html += `
+                        <div class="uptime-item">
+                            <h3>容器运行时间</h3>
+                            <div class="label">启动时间</div>
+                            <div class="value">${data.container_uptime.boot_time_str}</div>
+                            <div class="label">运行时长</div>
+                            <div class="value">${data.container_uptime.uptime_str}</div>
+                        </div>
+                    `;
+                }
+
+                document.getElementById('uptimeGrid').innerHTML = html || '<div style="text-align: center; color: #999;">暂无数据</div>';
+            } catch (error) {
+                document.getElementById('uptimeGrid').innerHTML = '<div class="error">加载失败: ' + error.message + '</div>';
+            }
+        }
+
+        // Query certificate
+        async function queryCert() {
+            const host = document.getElementById('certHost').value.trim();
+            if (!host) {
+                alert('请输入域名');
+                return;
+            }
+
+            const loading = document.getElementById('certLoading');
+            const result = document.getElementById('certResult');
+
+            loading.style.display = 'block';
+            result.innerHTML = '';
+
+            try {
+                const response = await fetch(`/cert?host=${encodeURIComponent(host)}`);
+                const data = await response.json();
+
+                loading.style.display = 'none';
+
+                if (data.success) {
+                    const daysRemaining = data.days_remaining;
+                    let statusClass = 'success';
+                    if (daysRemaining < 7) statusClass = 'error';
+                    else if (daysRemaining < 30) statusClass = 'warning';
+
+                    result.innerHTML = `
+                        <div class="result">
+                            <div class="info-row">
+                                <span class="info-label">域名</span>
+                                <span class="info-value">${data.host_requested}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">端口</span>
+                                <span class="info-value">${data.port}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">颁发者</span>
+                                <span class="info-value">${data.issuer}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">主题</span>
+                                <span class="info-value">${data.subject}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">生效时间</span>
+                                <span class="info-value">${data.not_before}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">过期时间</span>
+                                <span class="info-value">${data.not_after}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">剩余天数</span>
+                                <span class="info-value ${statusClass}">${daysRemaining.toFixed(2)} 天</span>
+                            </div>
+                            ${data.san && data.san.length > 0 ? `
+                            <div class="info-row">
+                                <span class="info-label">SAN</span>
+                                <span class="info-value">${data.san.join(', ')}</span>
+                            </div>
+                            ` : ''}
+                        </div>
+                    `;
+                } else {
+                    result.innerHTML = `<div class="error">查询失败: ${data.error}</div>`;
+                }
+            } catch (error) {
+                loading.style.display = 'none';
+                result.innerHTML = `<div class="error">请求失败: ${error.message}</div>`;
+            }
+        }
+
+        // Query WHOIS
+        async function queryWhois() {
+            const domain = document.getElementById('whoisDomain').value.trim();
+            if (!domain) {
+                alert('请输入域名');
+                return;
+            }
+
+            const loading = document.getElementById('whoisLoading');
+            const result = document.getElementById('whoisResult');
+
+            loading.style.display = 'block';
+            result.innerHTML = '';
+
+            try {
+                const response = await fetch(`/whois?domain=${encodeURIComponent(domain)}`);
+                const data = await response.json();
+
+                loading.style.display = 'none';
+
+                if (data.success) {
+                    result.innerHTML = `
+                        <div class="result">
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    result.innerHTML = `<div class="error">查询失败: ${data.error}</div>`;
+                }
+            } catch (error) {
+                loading.style.display = 'none';
+                result.innerHTML = `<div class="error">请求失败: ${error.message}</div>`;
+            }
+        }
+
+        // Allow Enter key to trigger search
+        document.getElementById('certHost').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') queryCert();
+        });
+
+        document.getElementById('whoisDomain').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') queryWhois();
+        });
+
+        // Load uptime on page load
+        loadUptime();
+
+        // Refresh uptime every 60 seconds
+        setInterval(loadUptime, 60000);
+    </script>
+</body>
+</html>

@@ -15,6 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY uptime/app.py /app/
 COPY uptime/entrypoint.sh /app/
+COPY uptime/templates /app/templates
 RUN chmod +x /app/entrypoint.sh
 
 EXPOSE 5000

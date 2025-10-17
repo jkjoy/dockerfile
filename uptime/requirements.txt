@@ -2,3 +2,4 @@ Flask>=2.0
 gunicorn>=20.0
 cryptography>=3.4
 x509>=0.1
+python-whois>=0.8.0

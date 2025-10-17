@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template
 import os
 import time
 import platform
@@ -12,8 +12,43 @@ import json
 from datetime import datetime, timedelta, timezone
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
+from functools import wraps
+import hashlib
+
+try:
+    import whois
+except ImportError:
+    whois = None
 
 app = Flask(__name__)
+
+# -------------------------
+# Cache mechanism (1 day TTL)
+# -------------------------
+_cache = {}
+
+def cache_with_ttl(ttl_seconds=86400):
+    """缓存装饰器，默认1天过期"""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            # 生成缓存键
+            cache_key = hashlib.md5(
+                f"{func.__name__}:{str(args)}:{str(kwargs)}".encode()
+            ).hexdigest()
+
+            # 检查缓存
+            if cache_key in _cache:
+                cached_data, cached_time = _cache[cache_key]
+                if time.time() - cached_time < ttl_seconds:
+                    return cached_data
+
+            # 执行函数并缓存结果
+            result = func(*args, **kwargs)
+            _cache[cache_key] = (result, time.time())
+            return result
+        return wrapper
+    return decorator
 
 # -------------------------
 # Boot / uptime helpers
@@ -108,9 +143,79 @@ def format_uptime_info(boot_ts):
     }
 
 # -------------------------
+# WHOIS query helper
+# -------------------------
+
+@cache_with_ttl(ttl_seconds=86400)  # 缓存1天
+def get_whois_info(domain: str) -> dict:
+    """查询域名WHOIS信息"""
+    result = {
+        "domain": domain,
+        "success": False,
+        "error": None,
+        "registrar": None,
+        "creation_date": None,
+        "expiration_date": None,
+        "updated_date": None,
+        "name_servers": [],
+        "status": [],
+        "whois_server": None,
+        "raw": None
+    }
+
+    if whois is None:
+        result["error"] = "WHOIS module not available. Please install python-whois package."
+        return result
+
+    try:
+        # 清理域名，移除协议和路径
+        domain = domain.replace("http://", "").replace("https://", "").split("/")[0].split(":")[0]
+
+        w = whois.whois(domain)
+
+        # 处理日期（可能是单个日期或日期列表）
+        def format_date(date_value):
+            if date_value is None:
+                return None
+            if isinstance(date_value, list):
+                date_value = date_value[0] if date_value else None
+            if isinstance(date_value, datetime):
+                return date_value.isoformat()
+            return str(date_value)
+
+        result.update({
+            "success": True,
+            "registrar": w.registrar if hasattr(w, 'registrar') else None,
+            "creation_date": format_date(w.creation_date) if hasattr(w, 'creation_date') else None,
+            "expiration_date": format_date(w.expiration_date) if hasattr(w, 'expiration_date') else None,
+            "updated_date": format_date(w.updated_date) if hasattr(w, 'updated_date') else None,
+            "name_servers": w.name_servers if isinstance(w.name_servers, list) else [w.name_servers] if hasattr(w, 'name_servers') and w.name_servers else [],
+            "status": w.status if isinstance(w.status, list) else [w.status] if hasattr(w, 'status') and w.status else [],
+            "whois_server": w.whois_server if hasattr(w, 'whois_server') else None,
+        })
+
+        # 计算过期剩余时间
+        if hasattr(w, 'expiration_date') and w.expiration_date:
+            exp_date = w.expiration_date
+            if isinstance(exp_date, list):
+                exp_date = exp_date[0]
+            if isinstance(exp_date, datetime):
+                now = datetime.now()
+                if exp_date.tzinfo is not None:
+                    now = datetime.now(timezone.utc)
+                days_remaining = (exp_date - now).total_seconds() / 86400
+                result["days_until_expiration"] = round(days_remaining, 2)
+
+    except Exception as e:
+        result["error"] = str(e)
+
+    return result
+
+# -------------------------
 # Certificate check helper (based on previous implementation)
 # -------------------------
 
+@cache_with_ttl(ttl_seconds=86400)  # 缓存1天
 def get_cert_info(host: str, port: int = 443, timeout: float = 5.0) -> dict:
     result = {
         "host_requested": host,
@@ -176,6 +281,11 @@ def get_cert_info(host: str, port: int = 443, timeout: float = 5.0) -> dict:
 # -------------------------
 # Flask endpoints
 # -------------------------
+@app.route("/", methods=["GET"])
+def index():
+    """首页"""
+    return render_template("index.html")
+
 @app.route("/uptime", methods=["GET"])
 def uptime_endpoint():
     """
@@ -247,6 +357,27 @@ def cert_endpoint():
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok", "time": int(time.time())})
+
+@app.route("/whois", methods=["GET"])
+def whois_endpoint():
+    """
+    /whois?domain=example.com -> 查询单个域名
+    /whois?domain=example.com,foo.com -> 查询多个域名（逗号分隔）
+    /whois?domain=example.com&domain=foo.com -> 查询多个域名（多个参数）
+    """
+    domains = request.args.getlist("domain")
+    if not domains:
+        raw = request.args.get("domain")
+        if raw:
+            domains = [d.strip() for d in raw.split(",") if d.strip()]
+    if not domains:
+        return jsonify({"error": "请提供 domain 参数，例如 /whois?domain=example.com"}), 400
+
+    results = []
+    for domain in domains:
+        results.append(get_whois_info(domain))
+
+    return jsonify(results if len(results) > 1 else results[0])
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
