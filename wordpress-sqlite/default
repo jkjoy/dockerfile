@@ -1,0 +1,35 @@
+server {
+    listen 80;
+    server_name _;
+    root /app;  # 网站根目录
+
+    # 默认索引文件
+    index index.php;
+
+    # 关闭未找到文件的日志记录
+    log_not_found off;
+
+    # 处理静态文件请求
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    # 处理 PHP 请求
+    location ~ [^/]\.php(/|$) {
+        fastcgi_buffer_size 128k;
+        fastcgi_buffers 256 16k;
+        fastcgi_busy_buffers_size 256k;
+        fastcgi_temp_file_write_size 256k;
+        fastcgi_read_timeout 240;
+        fastcgi_split_path_info ^(.+\.php)(/.+)$;
+        fastcgi_pass unix:/run/php-fpm84.sock;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+    }
+
+    # 禁止访问 .ht 文件
+    location ~ /\.ht {
+        deny all;
+    }
+}
