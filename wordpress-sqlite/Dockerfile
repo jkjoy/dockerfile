@@ -9,7 +9,8 @@ RUN apk --no-cache add \
     php84-mbstring php84-dom php84-openssl php84-zlib \
     php84-fileinfo php84-opcache php84-imap php84-exif \
     php84-pecl-imagick php84-pecl-redis \
-    php84-mysqli php84-pdo_mysql
+    php84-mysqli \
+    unzip
 
 # 复制配置文件
 COPY wordpress-sqlite/nginx.conf /etc/nginx/nginx.conf
