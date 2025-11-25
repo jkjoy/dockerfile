@@ -24,6 +24,9 @@ RUN chown -R nginx:nginx /app && chmod -R 755 /app
 RUN mkdir -p /etc/nginx/sites-enabled && \
     ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
 
+# 复制 WordPress 文件到容器
+COPY wordpress-sqlite/WordPress-6.8.3/ /usr/src/wordpress/
+
 # 复制并设置启动脚本
 COPY wordpress-sqlite/start.sh /start.sh
 RUN chmod +x /start.sh
