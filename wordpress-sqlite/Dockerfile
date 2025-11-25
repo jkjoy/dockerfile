@@ -24,7 +24,7 @@ RUN mkdir -p /etc/nginx/sites-enabled && \
     ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
 
 # 复制并设置启动脚本
-COPY wordpress/start.sh /start.sh
+COPY wordpress-sqlite/start.sh /start.sh
 RUN chmod +x /start.sh
 
 EXPOSE 80
