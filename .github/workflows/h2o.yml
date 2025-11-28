@@ -45,7 +45,7 @@ jobs:
         with:
           push: true
           context: .
-          file: hadsky/Dockerfile   
+          file: h2o/Dockerfile   
           platforms: |
             linux/amd64
             linux/arm64
