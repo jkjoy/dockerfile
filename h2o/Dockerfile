@@ -1,6 +1,8 @@
+# ==========================
+#   Build Stage
+# ==========================
 FROM alpine:latest AS builder
 
-# Build dependencies
 RUN apk add --no-cache \
     git \
     build-base \
@@ -15,11 +17,9 @@ RUN apk add --no-cache \
     automake \
     libtool
 
-# 获取 H2O 源码
 WORKDIR /src
 RUN git clone --depth=1 https://github.com/h2o/h2o.git .
 
-# 编译 H2O
 RUN cmake -B build -GNinja \
     -DCMAKE_BUILD_TYPE=Release \
     -DWITH_BUNDLED_SSL=OFF \
@@ -27,23 +27,39 @@ RUN cmake -B build -GNinja \
     -DWITH_H2OLOG=OFF \
     -DWITH_LIBUV=ON \
     .
+
 RUN cmake --build build --target h2o
 
+
+# ==========================
+#   Runtime Stage
+# ==========================
 FROM alpine:latest AS runtime
 
-# 必需的运行时依赖
 RUN apk add --no-cache \
     openssl \
     libuv \
     zlib
 
-# 复制编译后文件
+# 复制 h2o
 COPY --from=builder /src/build/h2o /usr/local/bin/h2o
-COPY --from=builder /src/examples/h2o.conf /etc/h2o/h2o.conf
 
-# 暴露端口
+# 创建最小配置
+RUN mkdir -p /etc/h2o
+RUN printf "\
+listen:\n\
+  port: 80\n\
+\n\
+hosts:\n\
+  default:\n\
+    paths:\n\
+      /:\n\
+        file.dir: /app\n\
+" > /etc/h2o/h2o.conf
+
+# 默认网站目录
+RUN mkdir -p /app && \
+    echo 'Hello from H2O!' > /app/index.html
+
 EXPOSE 80
-EXPOSE 443
-
-# 默认配置文件启动
 CMD ["h2o", "-c", "/etc/h2o/h2o.conf"]
