@@ -39,12 +39,11 @@ FROM alpine:latest AS runtime
 RUN apk add --no-cache \
     openssl \
     libuv \
-    zlib
+    zlib \
+    ca-certificates
 
-# 复制 h2o
 COPY --from=builder /src/build/h2o /usr/local/bin/h2o
 
-# 创建最小配置
 RUN mkdir -p /etc/h2o
 RUN printf "\
 listen:\n\
@@ -57,9 +56,7 @@ hosts:\n\
         file.dir: /app\n\
 " > /etc/h2o/h2o.conf
 
-# 默认网站目录
 RUN mkdir -p /app && \
     echo 'Hello from H2O!' > /app/index.html
-
 EXPOSE 80
 CMD ["h2o", "-c", "/etc/h2o/h2o.conf"]
