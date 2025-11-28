@@ -1,8 +1,6 @@
 FROM alpine:latest AS builder
 
 # ----- Build H2O -----
-FROM alpine:latest AS builder
-
 RUN apk add --no-cache \
     git \
     build-base \
