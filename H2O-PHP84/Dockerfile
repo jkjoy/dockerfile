@@ -1,14 +1,34 @@
 FROM alpine:latest AS builder
 
 # ----- Build H2O -----
+FROM alpine:latest AS builder
+
 RUN apk add --no-cache \
-    build-base cmake git openssl-dev libuv-dev zlib-dev ruby-dev bison flex
+    git \
+    build-base \
+    cmake \
+    openssl-dev \
+    zlib-dev \
+    libuv-dev \
+    readline-dev \
+    linux-headers \
+    ninja \
+    autoconf \
+    automake \
+    libtool
 
 WORKDIR /src
-RUN git clone --depth 1 https://github.com/h2o/h2o.git
-WORKDIR /src/h2o
-RUN cmake -DCMAKE_BUILD_TYPE=Release -DWITH_MRUBY=on .
-RUN make -j$(nproc) && make install
+RUN git clone --depth=1 https://github.com/h2o/h2o.git .
+
+RUN cmake -B build -GNinja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DWITH_BUNDLED_SSL=OFF \
+    -DWITH_MRUBY=OFF \
+    -DWITH_H2OLOG=OFF \
+    -DWITH_LIBUV=ON \
+    .
+
+RUN cmake --build build --target h2o
 
 
 # ======================
