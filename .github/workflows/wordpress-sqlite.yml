@@ -1,4 +1,4 @@
-name: Build And Upload Image For Wordpress
+name: Build And Upload Image For Wordpress-sqlite
 
 on:
   push:
