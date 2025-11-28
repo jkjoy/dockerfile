@@ -1,6 +1,3 @@
-# ==========================
-#   Build Stage
-# ==========================
 FROM alpine:latest AS builder
 
 # Build dependencies
@@ -32,9 +29,6 @@ RUN cmake -B build -GNinja \
     .
 RUN cmake --build build --target h2o
 
-# ==========================
-#   Runtime Stage
-# ==========================
 FROM alpine:latest AS runtime
 
 # 必需的运行时依赖
