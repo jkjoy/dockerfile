@@ -17,7 +17,8 @@
  *
  * @package WordPress
  */
-
+// ** Database settings - You can get this info from your web host ** //
+define( 'DB_NAME', 'database_name_here' );
 define( 'DB_USER', 'username_here' );
 define( 'DB_PASSWORD', 'password_here' );
 define( 'DB_HOST', 'localhost' );
@@ -31,6 +32,10 @@ define( 'AUTH_SALT',        'put your unique phrase here' );
 define( 'SECURE_AUTH_SALT', 'put your unique phrase here' );
 define( 'LOGGED_IN_SALT',   'put your unique phrase here' );
 define( 'NONCE_SALT',       'put your unique phrase here' );
+// Force SSL for admin and logins
+$_SERVER['HTTPS'] = 'on';
+define('FORCE_SSL_LOGIN', true);
+define('FORCE_SSL_ADMIN', true);
 
 $table_prefix = 'wp_';
 define( 'WP_DEBUG', false );
