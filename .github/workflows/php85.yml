@@ -53,3 +53,4 @@ jobs:
           tags: |
             ${{ secrets.DOCKER_USER_NAME }}/php85:${{ env.VERSION_TAG }}
             ${{ secrets.DOCKER_USER_NAME }}/php85:${{ env.COMMIT_ID }}
+            jkjoy/typecho:php85
