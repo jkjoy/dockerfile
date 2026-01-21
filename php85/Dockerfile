@@ -53,11 +53,11 @@ RUN pecl install imagick redis && \
 RUN mkdir -p /etc/nginx/sites-enabled /run/nginx
 
 # Copy configuration files
-COPY --chown=www-data:www-data nginx.conf /etc/nginx/nginx.conf
-COPY --chown=www-data:www-data php.ini /usr/local/etc/php/php.ini
-COPY --chown=www-data:www-data www.conf /usr/local/etc/php-fpm.d/www.conf
-COPY --chown=www-data:www-data default /etc/nginx/sites-available/default
-COPY --chown=www-data:www-data start.sh /start.sh
+COPY --chown=www-data:www-data php85/nginx.conf /etc/nginx/nginx.conf
+COPY --chown=www-data:www-data php85/php.ini /usr/local/etc/php/php.ini
+COPY --chown=www-data:www-data php85/www.conf /usr/local/etc/php-fpm.d/www.conf
+COPY --chown=www-data:www-data php85/default /etc/nginx/sites-available/default
+COPY --chown=www-data:www-data php85/start.sh /start.sh
 
 # Set up permissions
 RUN chmod +x /start.sh \
