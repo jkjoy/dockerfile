@@ -23,6 +23,23 @@ RUN apk --no-cache add \
     curl \
     tidyhtml
 
+# Install PHP extensions (based on actual available modules)
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install \
+        gd \
+        imap \
+        intl \
+        pdo_mysql \
+        pdo_pgsql \
+        zip \
+        exif \
+        xsl \
+        tidy
+
+# Install PECL extensions
+RUN pecl install imagick redis && \
+    docker-php-ext-enable imagick redis
+
 # Create nginx directories
 RUN mkdir -p /etc/nginx/sites-enabled /run/nginx
 
