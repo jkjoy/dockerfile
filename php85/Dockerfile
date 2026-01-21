@@ -5,40 +5,8 @@ WORKDIR /app
 # Install nginx and PHP dependencies
 RUN apk --no-cache add \
     nginx \
-    libzip-dev \
-    libpng-dev \
-    libjpeg-turbo-dev \
-    freetype-dev \
-    libxml2-dev \
-    libxslt-dev \
-    icu-dev \
-    imap-dev \
-    imagemagick-dev \
-    pkgconfig \
-    tidyhtml-dev \
-    oniguruma-dev \
-    postgresql-dev \
-    mysql-client \
     zip \
-    curl \
-    tidyhtml
-
-# Install PHP extensions (based on actual available modules)
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install \
-        gd \
-        imap \
-        intl \
-        pdo_mysql \
-        pdo_pgsql \
-        zip \
-        exif \
-        xsl \
-        tidy
-
-# Install PECL extensions
-RUN pecl install imagick redis && \
-    docker-php-ext-enable imagick redis
+    curl 
 
 # Create nginx directories
 RUN mkdir -p /etc/nginx/sites-enabled /run/nginx
