@@ -2,8 +2,16 @@ FROM php:8.5-fpm-alpine
 
 WORKDIR /app
 
-# Install nginx and PHP dependencies, build extensions, then remove build deps
-RUN apk add --no-cache --virtual .build-deps \
+# Install nginx and runtime dependencies
+RUN apk --no-cache add \
+    nginx \
+    zip \
+    curl \
+    tidyhtml \
+    mysql-client
+
+# Install build dependencies
+RUN apk --no-cache add --virtual .build-deps \
     libzip-dev \
     libpng-dev \
     libjpeg-turbo-dev \
@@ -16,17 +24,16 @@ RUN apk add --no-cache --virtual .build-deps \
     imagemagick-dev \
     autoconf \
     g++ \
-    make \
-    && apk add --no-cache \
-    nginx \
-    zip \
-    curl \
-    tidyhtml \
-    mysql-client \
+    make
+
+# Install PHP extensions
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j$(nproc) zip gd intl pdo_mysql pdo_pgsql xsl tidy \
     && pecl install imagick redis \
-    && docker-php-ext-enable imagick redis \
-    && apk del .build-deps \
+    && docker-php-ext-enable imagick redis
+
+# Remove build dependencies and cleanup
+RUN apk del .build-deps \
     && rm -rf /tmp/* /var/cache/apk/*
 
 # Create nginx directories
