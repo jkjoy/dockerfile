@@ -1,61 +1,53 @@
-FROM php:8.5-fpm-alpine
+FROM nginx:alpine
 
 WORKDIR /app
 
-# Install nginx and runtime dependencies
+# Install PHP and dependencies
 RUN apk --no-cache add \
-    nginx \
-    zip \
-    curl \
-    tidyhtml \
-    mysql-client
-
-# Install build dependencies
-RUN apk --no-cache add --virtual .build-deps \
-    libzip-dev \
-    libpng-dev \
-    libjpeg-turbo-dev \
-    freetype-dev \
-    libxml2-dev \
-    libxslt-dev \
-    icu-dev \
-    oniguruma-dev \
-    postgresql-dev \
-    imagemagick-dev \
-    autoconf \
-    g++ \
-    make
-
-# Install PHP extensions
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg || true
-RUN docker-php-ext-install -j$(nproc) zip || true
-RUN docker-php-ext-install -j$(nproc) gd || true
-RUN docker-php-ext-install -j$(nproc) intl || true
-RUN docker-php-ext-install -j$(nproc) pdo_mysql || true
-RUN docker-php-ext-install -j$(nproc) pdo_pgsql || true
-RUN docker-php-ext-install -j$(nproc) xsl || true
-RUN docker-php-ext-install -j$(nproc) tidy || true
-RUN pecl install imagick && docker-php-ext-enable imagick || true
-RUN pecl install redis && docker-php-ext-enable redis || true
-
-# Remove build dependencies and cleanup
-RUN apk del .build-deps \
-    && rm -rf /tmp/* /var/cache/apk/*
+    php85 \
+    php85-fpm \
+    php85-pdo \
+    php85-sqlite3 \
+    php85-pdo_pgsql \
+    php85-zip \
+    php85-curl \
+    php85-gd \
+    php85-intl \
+    php85-xsl \
+    php85-mbstring \
+    php85-dom \
+    php85-json \
+    php85-openssl \
+    php85-pdo_sqlite \
+    php85-zlib \
+    php85-fileinfo \
+    php85-opcache \
+    php85-imap \
+    php85-exif \
+    php85-ctype \
+    php85-tidy \
+    php85-tokenizer \
+    php85-session \
+    php85-pdo_mysql \
+    php85-xml \
+    php85-iconv \
+    php85-pecl-redis \
+    unzip \
+    curl
 
 # Create nginx directories
-RUN mkdir -p /etc/nginx/sites-enabled /run/nginx
+RUN mkdir -p /etc/nginx/sites-enabled /run/php-fpm
 
 # Copy configuration files
-COPY --chown=www-data:www-data php85/nginx.conf /etc/nginx/nginx.conf
-COPY --chown=www-data:www-data php85/php.ini /usr/local/etc/php/php.ini
-COPY --chown=www-data:www-data php85/www.conf /usr/local/etc/php-fpm.d/www.conf
-COPY --chown=www-data:www-data php85/default /etc/nginx/sites-available/default
-COPY --chown=www-data:www-data php85/start.sh /start.sh
+COPY --chown=nginx:nginx php85/nginx.conf /etc/nginx/nginx.conf
+COPY --chown=nginx:nginx php85/php.ini /etc/php85/php.ini
+COPY --chown=nginx:nginx php85/www.conf /etc/php85/php-fpm.d/www.conf
+COPY --chown=nginx:nginx php85/default /etc/nginx/sites-available/default
+COPY --chown=nginx:nginx php85/start.sh /start.sh
 
 # Set up permissions
 RUN chmod +x /start.sh \
-    && chown -R www-data:www-data /app \
-    && chown -R www-data:www-data /var/lib/nginx \
+    && chown -R nginx:nginx /app \
     && ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
 
 EXPOSE 80 443
