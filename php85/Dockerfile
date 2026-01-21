@@ -26,25 +26,7 @@ RUN apk --no-cache add \
 # Install PHP extensions
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install \
-        pdo \
-        pdo_mysql \
-        pdo_pgsql \
-        pdo_sqlite \
-        zip \
-        curl \
-        gd \
-        intl \
-        xsl \
-        mbstring \
-        dom \
-        opcache \
-        imap \
-        exif \
-        ctype \
-        tidy \
-        tokenizer \
-        xml \
-        fileinfo
+        imap
 
 # Install PECL extensions
 RUN pecl install imagick redis && \
