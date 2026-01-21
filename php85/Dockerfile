@@ -22,9 +22,6 @@ RUN apk --no-cache add \
     zip \
     curl \
     tidyhtml
-# Install PECL extensions
-RUN pecl install imagick redis && \
-    docker-php-ext-enable imagick redis
 
 # Create nginx directories
 RUN mkdir -p /etc/nginx/sites-enabled /run/nginx
