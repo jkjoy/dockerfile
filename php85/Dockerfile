@@ -2,9 +2,8 @@ FROM php:8.5-fpm-alpine
 
 WORKDIR /app
 
-# Install nginx and PHP dependencies
-RUN apk --no-cache add \
-    nginx \
+# Install nginx and PHP dependencies, build extensions, then remove build deps
+RUN apk add --no-cache --virtual .build-deps \
     libzip-dev \
     libpng-dev \
     libjpeg-turbo-dev \
@@ -12,33 +11,23 @@ RUN apk --no-cache add \
     libxml2-dev \
     libxslt-dev \
     icu-dev \
-    imap-dev \
-    imagemagick-dev \
     oniguruma-dev \
     postgresql-dev \
-    mysql-client \
+    imagemagick-dev \
+    autoconf \
+    g++ \
+    make \
+    && apk add --no-cache \
+    nginx \
     zip \
     curl \
-    tidyhtml
-
-# Install PHP extensions (with error tolerance)
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg || true
-RUN docker-php-ext-install zip || true
-RUN docker-php-ext-install gd || true
-RUN docker-php-ext-install imap || true
-RUN docker-php-ext-install intl || true
-RUN docker-php-ext-install pdo_mysql || true
-RUN docker-php-ext-install pdo_pgsql || true
-RUN docker-php-ext-install exif || true
-RUN docker-php-ext-install xsl || true
-RUN docker-php-ext-install tidy || true
-
-# Install PECL extensions
-RUN pecl install imagick && \
-    docker-php-ext-enable imagick || true
-
-RUN pecl install redis && \
-    docker-php-ext-enable redis || true
+    tidyhtml \
+    mysql-client \
+    && docker-php-ext-install -j$(nproc) zip gd intl pdo_mysql pdo_pgsql xsl tidy \
+    && pecl install imagick redis \
+    && docker-php-ext-enable imagick redis \
+    && apk del .build-deps \
+    && rm -rf /tmp/* /var/cache/apk/*
 
 # Create nginx directories
 RUN mkdir -p /etc/nginx/sites-enabled /run/nginx
