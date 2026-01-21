@@ -28,7 +28,7 @@ cleanup_on_exit() {
     if [ $exit_code -ne 0 ]; then
         log_error "脚本异常退出，退出码: $exit_code"
         log_info "正在清理资源..."
-        pkill -TERM php-fpm85 2>/dev/null || true
+        pkill -TERM php-fpm 2>/dev/null || true
         pkill -TERM nginx 2>/dev/null || true
         cleanup_temp_files
     fi
@@ -38,12 +38,12 @@ trap cleanup_on_exit EXIT INT TERM
 
 # 确保日志目录存在并有正确权限
 mkdir -p "$LOG_DIR"
-chown nginx:nginx "$LOG_DIR" || true
+chown www-data:www-data "$LOG_DIR" || true
 chmod 755 "$LOG_DIR" || true
 
 # 初始化日志文件
 touch "$LOG_FILE" || { echo "❌ 无法创建日志文件 $LOG_FILE"; exit 1; }
-chown nginx:nginx "$LOG_FILE" || true
+chown www-data:www-data "$LOG_FILE" || true
 chmod 644 "$LOG_FILE" || true
 
 # 重定向输出到日志文件
@@ -121,7 +121,7 @@ set_permissions() {
     description="${2:-目录}"
 
     log_info "设置 $description 权限..."
-    if chown -R nginx:nginx "$target_dir" 2>/dev/null; then
+    if chown -R www-data:www-data "$target_dir" 2>/dev/null; then
         log_success "$description 所有者设置成功"
     else
         log_warn "$description 所有者设置失败，但继续执行"
@@ -222,7 +222,7 @@ log_info "======================================"
 
 # 检查 PHP-FPM 配置
 log_info "检查 PHP-FPM 配置..."
-if ! php-fpm85 -t; then
+if ! php-fpm -t; then
     log_error "PHP-FPM 配置测试失败！"
     if [ -f /var/log/php-fpm.log ]; then
         log_error "PHP-FPM 日志内容:"
@@ -234,7 +234,7 @@ log_success "PHP-FPM 配置测试通过"
 
 # 启动 PHP-FPM
 log_info "▶️ 启动 PHP-FPM..."
-if ! php-fpm85 -D; then
+if ! php-fpm -D; then
     log_error "PHP-FPM 启动失败！"
     if [ -f /var/log/php-fpm.log ]; then
         log_error "PHP-FPM 日志内容:"
@@ -249,7 +249,7 @@ log_info "等待 PHP-FPM 完全启动..."
 sleep 2
 
 # 验证 PHP-FPM 进程
-if pgrep -f "php-fpm85" > /dev/null; then
+if pgrep -f "php-fpm" > /dev/null; then
     log_success "PHP-FPM 进程运行正常"
 else
     log_error "PHP-FPM 进程未找到！"

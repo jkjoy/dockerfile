@@ -2,7 +2,7 @@ server {
     listen   80;
     server_name  _;
     root   /app;
-    
+
     location / {
         index  index.php;
         if (!-e $request_filename) {
@@ -18,7 +18,7 @@ server {
         fastcgi_temp_file_write_size 256k;
         fastcgi_read_timeout 240;
         fastcgi_split_path_info ^(.+\.php)(/.+)$;
-        fastcgi_pass unix:/run/php-fpm85.sock;  
+        fastcgi_pass unix:/run/php-fpm.sock;
         fastcgi_index index.php;
         if (!-f $document_root$fastcgi_script_name) {
             return 404;

@@ -1,51 +1,68 @@
-FROM nginx:alpine
+FROM php:8.5-fpm-alpine
 
 WORKDIR /app
 
-# Install packages
+# Install nginx and PHP dependencies
 RUN apk --no-cache add \
-    php85 \
-    php85-fpm \
-    php85-pdo \
-    php85-sqlite3 \
-    php85-pdo_pgsql \
-    php85-zip \
-    php85-curl \
-    php85-gd \
-    php85-intl \
-    php85-xsl \
-    php85-mbstring \
-    php85-dom \
-    php85-json \
-    php85-openssl \
-    php85-pdo_sqlite \
-    php85-zlib \
-    php85-fileinfo \
-    php85-opcache \
-    php85-imap \
-    php85-exif \
-    php85-pecl-imagick \
-    php85-ctype \
-    php85-tidy \
-    php85-tokenizer \
-    php85-session \
-    php85-pdo_mysql \
-    php85-pecl-redis \
-    php85-xml \
-    php85-iconv \
-    && mkdir -p /etc/nginx/sites-enabled \
-    && rm -rf /var/cache/apk/*
+    nginx \
+    libzip-dev \
+    libpng-dev \
+    libjpeg-turbo-dev \
+    freetype-dev \
+    libxml2-dev \
+    libxslt-dev \
+    icu-dev \
+    imap-dev \
+    libmagickwand-dev \
+    libtidy-dev \
+    oniguruma-dev \
+    postgresql-dev \
+    mysql-client \
+    zip \
+    curl \
+    tidyhtml
+
+# Install PHP extensions
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install \
+        pdo \
+        pdo_mysql \
+        pdo_pgsql \
+        pdo_sqlite \
+        zip \
+        curl \
+        gd \
+        intl \
+        xsl \
+        mbstring \
+        dom \
+        opcache \
+        imap \
+        exif \
+        ctype \
+        tidy \
+        tokenizer \
+        xml \
+        fileinfo
+
+# Install PECL extensions
+RUN pecl install imagick redis && \
+    docker-php-ext-enable imagick redis
+
+# Create nginx directories
+RUN mkdir -p /etc/nginx/sites-enabled /run/nginx
 
 # Copy configuration files
-COPY php85/nginx.conf /etc/nginx/nginx.conf
-COPY php85/php.ini /etc/php85/php.ini
-COPY php85/www.conf /etc/php85/php-fpm.d/www.conf
-COPY php85/default /etc/nginx/sites-available/default
-COPY php85/start.sh /start.sh
+COPY nginx.conf /etc/nginx/nginx.conf
+COPY php.ini /usr/local/etc/php/php.ini
+COPY www.conf /usr/local/etc/php-fpm.d/www.conf
+COPY default /etc/nginx/sites-available/default
+COPY start.sh /start.sh
 
-# Set up permissions and symlinks in a single layer
+# Set up permissions
 RUN chmod +x /start.sh \
-    && chown -R nginx:nginx /app \
+    && chown -R www-data:www-data /app \
+    && chown -R www-data:www-data /var/lib/nginx \
     && ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
 
 EXPOSE 80 443
