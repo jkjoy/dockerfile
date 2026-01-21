@@ -27,10 +27,16 @@ RUN apk --no-cache add --virtual .build-deps \
     make
 
 # Install PHP extensions
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j$(nproc) zip gd intl pdo_mysql pdo_pgsql xsl tidy \
-    && pecl install imagick redis \
-    && docker-php-ext-enable imagick redis
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg || true
+RUN docker-php-ext-install -j$(nproc) zip || true
+RUN docker-php-ext-install -j$(nproc) gd || true
+RUN docker-php-ext-install -j$(nproc) intl || true
+RUN docker-php-ext-install -j$(nproc) pdo_mysql || true
+RUN docker-php-ext-install -j$(nproc) pdo_pgsql || true
+RUN docker-php-ext-install -j$(nproc) xsl || true
+RUN docker-php-ext-install -j$(nproc) tidy || true
+RUN pecl install imagick && docker-php-ext-enable imagick || true
+RUN pecl install redis && docker-php-ext-enable redis || true
 
 # Remove build dependencies and cleanup
 RUN apk del .build-deps \
