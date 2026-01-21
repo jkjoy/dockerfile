@@ -3,7 +3,7 @@ FROM nginx:alpine
 WORKDIR /app
 
 # Install PHP and dependencies
-RUN apk update && apk --no-cache add \
+RUN apk --no-cache add \
     php85 \
     php85-fpm \
     php85-pdo \
@@ -21,7 +21,6 @@ RUN apk update && apk --no-cache add \
     php85-pdo_sqlite \
     php85-zlib \
     php85-fileinfo \
-    php85-opcache \
     php85-imap \
     php85-exif \
     php85-ctype \
