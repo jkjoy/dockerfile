@@ -13,8 +13,9 @@ RUN apk --no-cache add \
     libxslt-dev \
     icu-dev \
     imap-dev \
-    libmagickwand-dev \
-    libtidy-dev \
+    imagemagick-dev \
+    pkgconfig \
+    tidyhtml-dev \
     oniguruma-dev \
     postgresql-dev \
     mysql-client \
