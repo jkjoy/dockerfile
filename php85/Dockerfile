@@ -23,10 +23,8 @@ RUN apk --no-cache add \
     curl \
     tidyhtml
 
-# Install PHP extensions
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install \
-        imap
+# Install PHP extensions (most are already built-in in PHP 8.5)
+RUN docker-php-ext-install imap
 
 # Install PECL extensions
 RUN pecl install imagick redis && \
