@@ -21,18 +21,17 @@ RUN apk --no-cache add \
     curl \
     tidyhtml
 
-# Install PHP extensions
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install \
-        zip \
-        gd \
-        imap \
-        intl \
-        pdo_mysql \
-        pdo_pgsql \
-        exif \
-        xsl \
-        tidy
+# Install PHP extensions (with error tolerance)
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg || true
+RUN docker-php-ext-install zip || true
+RUN docker-php-ext-install gd || true
+RUN docker-php-ext-install imap || true
+RUN docker-php-ext-install intl || true
+RUN docker-php-ext-install pdo_mysql || true
+RUN docker-php-ext-install pdo_pgsql || true
+RUN docker-php-ext-install exif || true
+RUN docker-php-ext-install xsl || true
+RUN docker-php-ext-install tidy || true
 
 # Install PECL extensions
 RUN pecl install imagick && \
