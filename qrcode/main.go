@@ -2,10 +2,11 @@ package main
 
 import (
 	"bytes"
-	"encoding/base64"
 	"fmt"
+	"image/color"
 	"log"
 	"net/http"
+	"strings"
 	"os"
 	"strconv"
 	"sync"
@@ -26,34 +27,31 @@ type cacheItem struct {
 var (
 	cache      = make(map[string]cacheItem)
 	cacheMutex sync.RWMutex
-	cacheTTL   = 10 * time.Minute // 缓存有效期
+	cacheTTL   = 10 * time.Minute
 )
 
 // 请求结构
 type qrRequest struct {
-	Content string `json:"content" form:"content" binding:"required"`
+	Content string `json:"content" form:"content"`
 	Size    int    `json:"size" form:"size"`
 	Format  string `json:"format" form:"format"`
+	FgColor string `json:"fg_color" form:"fg_color"` // 前景色，如 #000000
+	BgColor string `json:"bg_color" form:"bg_color"` // 背景色，如 #FFFFFF
 }
 
 func main() {
-	// 初始化日志
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 
-	// 启动缓存清理协程
 	go cleanupCache()
 
 	r := gin.Default()
-
-	// 添加日志中间件
 	r.Use(loggingMiddleware())
 
-	// 定义API路由
+	r.StaticFile("/", "./index.html")
 	r.GET("/qrcode", generateQRCode)
 	r.POST("/qrcode", generateQRCode)
 
-	// 启动服务器
 	slog.Info("QR Code API is running on :8080")
 	if err := r.Run(":8080"); err != nil {
 		slog.Error("Failed to start server", "error", err)
@@ -68,12 +66,9 @@ func loggingMiddleware() gin.HandlerFunc {
 		path := c.Request.URL.Path
 		raw := c.Request.URL.RawQuery
 
-		// 处理请求
 		c.Next()
 
-		// 记录日志
-		end := time.Now()
-		latency := end.Sub(start)
+		latency := time.Since(start)
 		if raw != "" {
 			path = path + "?" + raw
 		}
@@ -103,7 +98,6 @@ func cleanupCache() {
 	}
 }
 
-// 从缓存获取
 func getFromCache(key string) ([]byte, bool) {
 	cacheMutex.RLock()
 	defer cacheMutex.RUnlock()
@@ -114,7 +108,6 @@ func getFromCache(key string) ([]byte, bool) {
 	return item.data, true
 }
 
-// 存入缓存
 func setToCache(key string, data []byte) {
 	cacheMutex.Lock()
 	defer cacheMutex.Unlock()
@@ -124,17 +117,35 @@ func setToCache(key string, data []byte) {
 	}
 }
 
-// 生成缓存键
-func generateCacheKey(content string, size int, format string) string {
-	return fmt.Sprintf("%s|%d|%s", content, size, format)
+func generateCacheKey(content string, size int, format, fgColor, bgColor string) string {
+	return fmt.Sprintf("%s|%d|%s|%s|%s", content, size, format, fgColor, bgColor)
+}
+
+// 解析十六进制颜色，如 #FF0000 或 FF0000
+func parseHexColor(hex string) (color.RGBA, error) {
+	hex = strings.TrimPrefix(hex, "#")
+	if len(hex) != 6 {
+		return color.RGBA{}, fmt.Errorf("invalid color: %s", hex)
+	}
+	r, err := strconv.ParseUint(hex[0:2], 16, 8)
+	if err != nil {
+		return color.RGBA{}, err
+	}
+	g, err := strconv.ParseUint(hex[2:4], 16, 8)
+	if err != nil {
+		return color.RGBA{}, err
+	}
+	b, err := strconv.ParseUint(hex[4:6], 16, 8)
+	if err != nil {
+		return color.RGBA{}, err
+	}
+	return color.RGBA{R: uint8(r), G: uint8(g), B: uint8(b), A: 255}, nil
 }
 
 // 生成二维码
 func generateQRCode(c *gin.Context) {
 	var req qrRequest
-	//	var err error // 这里声明了err但后面没有使用
 
-	// 根据请求方法解析参数
 	if c.Request.Method == http.MethodGet {
 		req.Content = c.Query("content")
 		if req.Content == "" {
@@ -143,24 +154,46 @@ func generateQRCode(c *gin.Context) {
 		}
 		req.Size, _ = strconv.Atoi(c.DefaultQuery("size", "256"))
 		req.Format = c.DefaultQuery("format", "png")
+		req.FgColor = c.DefaultQuery("fg_color", "#000000")
+		req.BgColor = c.DefaultQuery("bg_color", "#FFFFFF")
 	} else {
-		// 这里使用 := 重新声明err，不需要之前的声明
 		if err := c.ShouldBind(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request: " + err.Error()})
 			return
 		}
+		if req.Content == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "content parameter is required"})
+			return
+		}
 	}
 
-	// 参数验证
 	if req.Size <= 0 {
 		req.Size = 256
 	}
 	if req.Format != "png" && req.Format != "svg" {
 		req.Format = "png"
 	}
+	if req.FgColor == "" {
+		req.FgColor = "#000000"
+	}
+	if req.BgColor == "" {
+		req.BgColor = "#FFFFFF"
+	}
+
+	// 解析颜色
+	fgColor, err := parseHexColor(req.FgColor)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid fg_color: " + err.Error()})
+		return
+	}
+	bgColor, err := parseHexColor(req.BgColor)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid bg_color: " + err.Error()})
+		return
+	}
 
 	// 检查缓存
-	cacheKey := generateCacheKey(req.Content, req.Size, req.Format)
+	cacheKey := generateCacheKey(req.Content, req.Size, req.Format, req.FgColor, req.BgColor)
 	if cachedData, found := getFromCache(cacheKey); found {
 		slog.Debug("serving from cache", "key", cacheKey)
 		sendResponse(c, req.Format, cachedData)
@@ -168,54 +201,45 @@ func generateQRCode(c *gin.Context) {
 	}
 
 	// 生成二维码
+	qr, err := qrcode.New(req.Content, qrcode.Medium)
+	if err != nil {
+		slog.Error("failed to generate QR code", "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate QR code"})
+		return
+	}
+	qr.DisableBorder = true
+	qr.ForegroundColor = fgColor
+	qr.BackgroundColor = bgColor
+
 	var output []byte
 	if req.Format == "svg" {
-		// SVG格式 - 使用简单的SVG生成
-		qr, err := qrcode.New(req.Content, qrcode.Medium)
-		if err != nil {
-			slog.Error("failed to generate QR code", "error", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate QR code"})
-			return
-		}
-		output = []byte(generateSimpleSVG(qr, req.Size))
+		output = []byte(generateSimpleSVG(qr, req.Size, req.FgColor, req.BgColor))
 	} else {
-		// PNG格式
-		qr, err := qrcode.New(req.Content, qrcode.Medium)
-		if err != nil {
-			slog.Error("failed to generate QR code", "error", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate QR code"})
-			return
-		}
-		qr.DisableBorder = true
 		output, err = qr.PNG(req.Size)
 		if err != nil {
-			slog.Error("failed to generate PNG QR code", "error", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate PNG QR code"})
+			slog.Error("failed to generate PNG", "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate PNG"})
 			return
 		}
 	}
 
-	// 存入缓存
 	setToCache(cacheKey, output)
-
-	// 发送响应
 	sendResponse(c, req.Format, output)
 }
 
-// 生成简单的SVG
-func generateSimpleSVG(qr *qrcode.QRCode, size int) string {
-	var buf bytes.Buffer
-	buf.WriteString(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 29 29" width="`)
-	buf.WriteString(strconv.Itoa(size))
-	buf.WriteString(`" height="`)
-	buf.WriteString(strconv.Itoa(size))
-	buf.WriteString(`">`)
-	buf.WriteString(`<rect width="29" height="29" fill="#FFFFFF"/>`)
+// 生成SVG
+func generateSimpleSVG(qr *qrcode.QRCode, size int, fgColor, bgColor string) string {
+	bitmap := qr.Bitmap()
+	modules := len(bitmap)
 
-	for y := 0; y < len(qr.Bitmap()); y++ {
-		for x := 0; x < len(qr.Bitmap()[y]); x++ {
-			if qr.Bitmap()[y][x] {
-				buf.WriteString(fmt.Sprintf(`<rect x="%d" y="%d" width="1" height="1" fill="#000000"/>`, x, y))
+	var buf bytes.Buffer
+	buf.WriteString(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" width="%d" height="%d">`, modules, modules, size, size))
+	buf.WriteString(fmt.Sprintf(`<rect width="%d" height="%d" fill="%s"/>`, modules, modules, bgColor))
+
+	for y := 0; y < modules; y++ {
+		for x := 0; x < modules; x++ {
+			if bitmap[y][x] {
+				buf.WriteString(fmt.Sprintf(`<rect x="%d" y="%d" width="1" height="1" fill="%s"/>`, x, y, fgColor))
 			}
 		}
 	}
@@ -224,14 +248,13 @@ func generateSimpleSVG(qr *qrcode.QRCode, size int) string {
 	return buf.String()
 }
 
-// 发送响应
+// 发送响应 - 直接返回图片文件
 func sendResponse(c *gin.Context, format string, data []byte) {
 	if format == "svg" {
+		c.Header("Content-Disposition", "inline; filename=qrcode.svg")
 		c.Data(http.StatusOK, "image/svg+xml", data)
 	} else {
-		c.JSON(http.StatusOK, gin.H{
-			"qrcode": base64.StdEncoding.EncodeToString(data),
-			"format": format,
-		})
+		c.Header("Content-Disposition", "inline; filename=qrcode.png")
+		c.Data(http.StatusOK, "image/png", data)
 	}
 }

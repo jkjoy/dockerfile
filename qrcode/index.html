@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QR Code Generator</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    background: #1a1a1a;
+    color: #ccc;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 60px 20px;
+  }
+
+  .container {
+    width: 100%;
+    max-width: 480px;
+  }
+
+  h1 {
+    font-size: 18px;
+    font-weight: 500;
+    color: #999;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #333;
+    margin-bottom: 32px;
+  }
+
+  .field {
+    margin-bottom: 24px;
+  }
+
+  label {
+    display: block;
+    font-size: 12px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+
+  input[type="text"],
+  input[type="number"],
+  select {
+    width: 100%;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid #333;
+    color: #ddd;
+    font-size: 15px;
+    padding: 8px 0;
+    outline: none;
+    border-radius: 0;
+    -webkit-appearance: none;
+  }
+
+  input:focus, select:focus {
+    border-bottom-color: #888;
+  }
+
+  select {
+    cursor: pointer;
+  }
+
+  select option {
+    background: #222;
+    color: #ddd;
+  }
+
+  .row {
+    display: flex;
+    gap: 24px;
+  }
+
+  .row .field {
+    flex: 1;
+  }
+
+  .color-field {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 8px;
+  }
+
+  .color-field input[type="color"] {
+    width: 28px;
+    height: 28px;
+    border: 1px solid #444;
+    background: none;
+    cursor: pointer;
+    padding: 0;
+    -webkit-appearance: none;
+  }
+
+  .color-field input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+  .color-field input[type="color"]::-webkit-color-swatch { border: none; }
+
+  .color-field .hex {
+    flex: 1;
+    border-bottom: none;
+    font-family: monospace;
+    font-size: 14px;
+  }
+
+  .actions {
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid #333;
+    display: flex;
+    gap: 12px;
+  }
+
+  button {
+    flex: 1;
+    padding: 10px 0;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    cursor: pointer;
+    border: 1px solid #444;
+    background: transparent;
+    color: #aaa;
+  }
+
+  button:hover {
+    border-color: #888;
+    color: #ddd;
+  }
+
+  button.primary {
+    background: #ddd;
+    color: #1a1a1a;
+    border-color: #ddd;
+  }
+
+  button.primary:hover {
+    background: #fff;
+    border-color: #fff;
+  }
+
+  .preview {
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid #333;
+    text-align: center;
+    display: none;
+  }
+
+  .preview img {
+    max-width: 280px;
+    width: 100%;
+    display: block;
+    margin: 0 auto 20px;
+  }
+
+  .preview .url-box {
+    text-align: left;
+    margin-top: 16px;
+  }
+
+  .preview .url-box label {
+    margin-bottom: 6px;
+  }
+
+  .preview .url-text {
+    width: 100%;
+    font-family: monospace;
+    font-size: 12px;
+    color: #777;
+    word-break: break-all;
+    line-height: 1.6;
+    padding: 8px 0;
+    border-bottom: 1px solid #333;
+    cursor: pointer;
+  }
+
+  .preview .url-text:hover {
+    color: #aaa;
+  }
+
+  .tip {
+    font-size: 11px;
+    color: #555;
+    margin-top: 6px;
+  }
+
+  .error {
+    color: #a44;
+    font-size: 13px;
+    margin-top: 12px;
+    display: none;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>QR Code Generator</h1>
+
+  <div class="field">
+    <label>Content</label>
+    <input type="text" id="content" placeholder="URL or text" autofocus>
+  </div>
+
+  <div class="row">
+    <div class="field">
+      <label>Size (px)</label>
+      <input type="number" id="size" value="512" min="64" max="2048" step="64">
+    </div>
+    <div class="field">
+      <label>Format</label>
+      <select id="format">
+        <option value="png">PNG</option>
+        <option value="svg">SVG</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="field">
+      <label>Foreground</label>
+      <div class="color-field">
+        <input type="color" id="fg_picker" value="#000000">
+        <input type="text" class="hex" id="fg_color" value="#000000" maxlength="7">
+      </div>
+    </div>
+    <div class="field">
+      <label>Background</label>
+      <div class="color-field">
+        <input type="color" id="bg_picker" value="#FFFFFF">
+        <input type="text" class="hex" id="bg_color" value="#FFFFFF" maxlength="7">
+      </div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" onclick="resetForm()">Reset</button>
+    <button type="button" class="primary" onclick="generate()">Generate</button>
+  </div>
+
+  <div class="error" id="error"></div>
+
+  <div class="preview" id="preview">
+    <img id="qr_img" alt="QR Code">
+    <div style="display:flex;gap:12px;">
+      <button type="button" onclick="download()">Download</button>
+      <button type="button" onclick="copyUrl()">Copy URL</button>
+    </div>
+    <div class="url-box">
+      <label>API URL</label>
+      <div class="url-text" id="api_url" onclick="copyUrl()" title="Click to copy"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const $ = id => document.getElementById(id);
+
+  // Sync color picker <-> hex input
+  $('fg_picker').oninput = function() { $('fg_color').value = this.value.toUpperCase(); };
+  $('bg_picker').oninput = function() { $('bg_color').value = this.value.toUpperCase(); };
+  $('fg_color').oninput = function() { if (/^#[0-9A-Fa-f]{6}$/.test(this.value)) $('fg_picker').value = this.value; };
+  $('bg_color').oninput = function() { if (/^#[0-9A-Fa-f]{6}$/.test(this.value)) $('bg_picker').value = this.value; };
+
+  let currentBlob = null;
+  let currentFormat = 'png';
+
+  function buildUrl() {
+    const base = window.location.origin + '/qrcode';
+    const params = new URLSearchParams({
+      content: $('content').value,
+      size: $('size').value,
+      format: $('format').value,
+      fg_color: $('fg_color').value,
+      bg_color: $('bg_color').value,
+    });
+    return base + '?' + params.toString();
+  }
+
+  async function generate() {
+    const content = $('content').value.trim();
+    if (!content) {
+      showError('Please enter content');
+      return;
+    }
+    hideError();
+
+    const url = buildUrl();
+    currentFormat = $('format').value;
+
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        showError(data?.error || 'Request failed');
+        return;
+      }
+
+      currentBlob = await res.blob();
+      const objectUrl = URL.createObjectURL(currentBlob);
+      $('qr_img').src = objectUrl;
+      $('api_url').textContent = url;
+      $('preview').style.display = 'block';
+    } catch (e) {
+      showError('Cannot connect to server');
+    }
+  }
+
+  function download() {
+    if (!currentBlob) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(currentBlob);
+    a.download = 'qrcode.' + currentFormat;
+    a.click();
+  }
+
+  function copyUrl() {
+    const url = $('api_url').textContent;
+    if (!url) return;
+    navigator.clipboard.writeText(url);
+  }
+
+  function resetForm() {
+    $('content').value = '';
+    $('size').value = '512';
+    $('format').value = 'png';
+    $('fg_color').value = '#000000';
+    $('fg_picker').value = '#000000';
+    $('bg_color').value = '#FFFFFF';
+    $('bg_picker').value = '#FFFFFF';
+    $('preview').style.display = 'none';
+    hideError();
+  }
+
+  function showError(msg) { $('error').textContent = msg; $('error').style.display = 'block'; }
+  function hideError() { $('error').style.display = 'none'; }
+
+  // Enter key to generate
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') generate();
+  });
+</script>
+</body>
+</html>
