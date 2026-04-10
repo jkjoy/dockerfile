@@ -1,0 +1,53 @@
+name: Build And Upload Image For mastodon-message
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "mastodon-message/**"
+      - ".github/workflows/mastodon-message.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKER_USER_NAME }}
+          password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+
+      - name: Extract Version
+        run: |
+          echo "VERSION_TAG=latest" >> $GITHUB_ENV
+          echo "COMMIT_ID=${GITHUB_SHA::7}" >> $GITHUB_ENV
+
+      - name: Build and Push Image
+        uses: docker/build-push-action@v7
+        with:
+          context: ./mastodon-message
+          file: ./mastodon-message/Dockerfile
+          push: true
+          platforms: |
+            linux/amd64
+            linux/arm64
+          tags: |
+            ${{ secrets.DOCKER_USER_NAME }}/mastodon-message:${{ env.VERSION_TAG }}
+            ${{ secrets.DOCKER_USER_NAME }}/mastodon-message:${{ env.COMMIT_ID }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

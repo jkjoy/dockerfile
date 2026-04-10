@@ -7,7 +7,7 @@ from html import unescape
 # 配置
 MASTODON_INSTANCE = os.getenv("MASTODON_INSTANCE", "https://xxx.xxx")
 MASTODON_TOKEN = os.getenv("MASTODON_TOKEN", "xxx")
-QQ_API = os.getenv("QQ_API", "https://bot.0tz.top/send_private_msg")
+QQ_API = os.getenv("QQ_API", "https://bot.asbid.cn/send_private_msg")
 QQ_ID = os.getenv("QQ_ID", "80116747")
 CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", 60)) 
 STATE_FILE = "./data/state.json"
