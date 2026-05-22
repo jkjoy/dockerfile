@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>双色球历史分析与预测工具</title>
+    <link rel="stylesheet" href="/static/style.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">SSQ DATA LAB</p>
+          <h1>双色球历史分析与预测工具</h1>
+          <p class="header-text">历史开奖分析、下一期候选号码、预测回测与号码分布集中查看。</p>
+        </div>
+        <div class="header-actions">
+          <button id="refreshButton" class="primary-button">刷新官方数据</button>
+          <span id="statusText" class="status-text">准备加载数据...</span>
+        </div>
+      </header>
+
+      <nav class="page-nav" aria-label="页面导航">
+        <button class="page-tab active" type="button" data-page="dashboard" aria-controls="dashboardPage" aria-selected="true">总览</button>
+        <button class="page-tab" type="button" data-page="prediction" aria-controls="predictionPage" aria-selected="false">预测</button>
+        <button class="page-tab" type="button" data-page="backtest" aria-controls="backtestPage" aria-selected="false">回测</button>
+        <button class="page-tab" type="button" data-page="stats" aria-controls="statsPage" aria-selected="false">分布</button>
+        <button class="page-tab" type="button" data-page="history" aria-controls="historyPage" aria-selected="false">开奖</button>
+        <button class="page-tab" type="button" data-page="notes" aria-controls="notesPage" aria-selected="false">说明</button>
+      </nav>
+
+      <section id="warningBanner" class="warning-banner hidden"></section>
+
+      <section id="dashboardPage" class="page-view active-page" data-page="dashboard">
+        <div class="hero-grid">
+          <article class="panel hero-summary">
+            <div class="section-header">
+              <div>
+                <p class="section-kicker">概览</p>
+                <h2>当前数据状态</h2>
+              </div>
+              <span class="soft-badge">自动同步</span>
+            </div>
+            <div class="hero-metrics">
+              <div class="hero-card">
+                <span class="hero-label">最新开奖期号</span>
+                <strong id="latestIssueValue">--</strong>
+              </div>
+              <div class="hero-card">
+                <span class="hero-label">历史期数</span>
+                <strong id="drawCountValue">--</strong>
+              </div>
+              <div class="hero-card">
+                <span class="hero-label">上次同步时间</span>
+                <strong id="lastSyncValue">--</strong>
+              </div>
+              <div class="hero-card">
+                <span class="hero-label">预测基准期号</span>
+                <strong id="predictionBaseValue">--</strong>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel">
+            <p class="section-kicker">概率</p>
+            <h2>当前最新一期分析</h2>
+            <div id="latestAnalysis" class="latest-analysis"></div>
+          </article>
+        </div>
+
+        <article class="panel">
+          <p class="section-kicker">指标</p>
+          <h2>核心指标</h2>
+          <div id="summaryCards" class="metric-grid"></div>
+        </article>
+      </section>
+
+      <section id="predictionPage" class="page-view" data-page="prediction" hidden>
+        <div class="page-title">
+          <div>
+            <p class="section-kicker">预测</p>
+            <h2>下一期号码候选</h2>
+          </div>
+          <p class="section-note">展示模型生成的 5 注候选号码、优先号码池和冷热排序。</p>
+        </div>
+        <div class="content-grid">
+          <article class="panel panel-wide">
+            <div id="predictionPanel"></div>
+          </article>
+          <article class="panel">
+            <p class="section-kicker">冷热</p>
+            <h2>热号与冷号</h2>
+            <div id="hotColdPanel" class="hot-cold-grid"></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="backtestPage" class="page-view" data-page="backtest" hidden>
+        <div class="page-title">
+          <div>
+            <p class="section-kicker">回测</p>
+            <h2>预测中奖回测</h2>
+          </div>
+          <p class="section-note">每期回测会列出真实开奖号码，并附上当期预测的 5 注号码与命中情况。</p>
+        </div>
+        <div class="stacked-grid">
+          <article class="panel">
+            <p class="section-kicker">表现</p>
+            <h2>累计中奖率</h2>
+            <div id="performancePanel"></div>
+          </article>
+          <article class="panel">
+            <p class="section-kicker">验票</p>
+            <h2>最近开奖回测</h2>
+            <div id="evaluationPanel" class="evaluation-list"></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="statsPage" class="page-view" data-page="stats" hidden>
+        <div class="page-title">
+          <div>
+            <p class="section-kicker">频率</p>
+            <h2>号码分布</h2>
+          </div>
+          <p class="section-note">按历史出现次数、近期开奖、遗漏值和预测指数查看号码状态。</p>
+        </div>
+        <div class="stacked-grid">
+          <article class="panel">
+            <div class="section-header">
+              <div>
+                <p class="section-kicker">红球</p>
+                <h2>红球分布</h2>
+              </div>
+              <p class="section-note">01-33</p>
+            </div>
+            <div id="redStatsTable"></div>
+          </article>
+
+          <article class="panel">
+            <div class="section-header">
+              <div>
+                <p class="section-kicker">蓝球</p>
+                <h2>蓝球分布</h2>
+              </div>
+              <p class="section-note">01-16</p>
+            </div>
+            <div id="blueStatsTable"></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="historyPage" class="page-view" data-page="history" hidden>
+        <article class="panel">
+          <div class="section-header">
+            <div>
+              <p class="section-kicker">历史</p>
+              <h2>往期开奖查询</h2>
+            </div>
+            <div class="search-box">
+              <input id="historySearchInput" type="search" placeholder="输入期号、红球、蓝球，例如 2026043 或 06,09">
+            </div>
+          </div>
+          <div id="historyTable"></div>
+        </article>
+      </section>
+
+      <section id="notesPage" class="page-view" data-page="notes" hidden>
+        <article class="panel">
+          <p class="section-kicker">说明</p>
+          <h2>数据来源与提示</h2>
+          <div id="notesPanel" class="notes-panel"></div>
+        </article>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

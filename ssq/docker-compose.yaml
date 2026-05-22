@@ -1,0 +1,26 @@
+name: ssq-predictor
+
+services:
+  ssq-predictor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ssq-predictor
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - ssq_predictor_data:/app/data
+    command:
+      - python
+      - app.py
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --no-browser
+
+volumes:
+  ssq_predictor_data:
