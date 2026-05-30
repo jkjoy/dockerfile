@@ -97,14 +97,14 @@ docker run -d \
 
 `encryption` 可选值：
 
-- `starttls`：常用于 587。
-- `tls`：常用于 465。
-- `none`：不加密。
+- `starttls`：常用于 587，先连接再升级 TLS。
+- `tls`：也就是常说的 SSL/SMTPS，常用于 465。
+- `none`：不加密，只建议受信任的内网 relay。
 
 更新 SMTP 时如果不传 `password`，会保留旧密码。
 如果 `username` 为空，则允许不配置密码，适合无需认证的 SMTP relay。
 
-也可以在 GoAdmin 后台的 `SMTP Config` 页面维护 SMTP 配置并发送测试邮件。编辑时密码框留空表示保留旧密码。
+也可以在 GoAdmin 后台的 `SMTP Config` 页面维护 SMTP 配置并发送测试邮件。测试会使用当前表单值；密码框留空时会沿用已保存密码。失败时会显示 `kind`、`hint`、`status`，用于区分 DNS、端口、加密方式、认证或收件人被拒绝等问题。
 
 ### 查看 SMTP
 

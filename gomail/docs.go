@@ -508,6 +508,13 @@ X-Admin-Token: &lt;ADMIN_TOKEN&gt;</pre></div>
         <div class="codebox"><button class="copy" type="button">复制</button><pre>{
   "error": "invalid api key"
 }</pre></div>
+        <p>SMTP 保存、测试或发信失败时会额外返回 <code>status</code>、<code>kind</code>、<code>hint</code>，用于判断是 DNS、端口、加密、认证还是投递限制问题。</p>
+        <div class="codebox"><button class="copy" type="button">复制</button><pre>{
+  "error": "smtp delivery failed: 535 5.7.8 authentication failed",
+  "status": 502,
+  "kind": "auth",
+  "hint": "SMTP authentication failed. Check the username, password, and app password or authorization code."
+}</pre></div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>状态码</th><th>场景</th></tr></thead>
@@ -545,7 +552,7 @@ X-Admin-Token: &lt;ADMIN_TOKEN&gt;</pre></div>
                 <tr><td><code>password</code></td><td>string</td><td>SMTP 密码；更新时可省略</td></tr>
                 <tr><td><code>from_email</code></td><td>string</td><td>发件邮箱，必须是邮箱地址</td></tr>
                 <tr><td><code>from_name</code></td><td>string</td><td>发件人显示名</td></tr>
-                <tr><td><code>encryption</code></td><td>string</td><td><code>starttls</code>、<code>tls</code>、<code>none</code></td></tr>
+                <tr><td><code>encryption</code></td><td>string</td><td><code>starttls</code>、<code>tls</code>、<code>none</code>。<code>tls</code> 对应常说的 SSL/SMTPS，通常端口 465；<code>starttls</code> 通常端口 587；<code>none</code> 只建议内网 relay。</td></tr>
               </tbody>
             </table>
           </div>

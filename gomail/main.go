@@ -121,6 +121,11 @@ type sendMailRequest struct {
 	ReplyTo string   `json:"reply_to,omitempty"`
 }
 
+type smtpTestRequest struct {
+	smtpConfigRequest
+	sendMailRequest
+}
+
 type sendMailResponse struct {
 	Status     string `json:"status"`
 	Recipients int    `json:"recipients"`
@@ -397,7 +402,7 @@ func (a *app) handlePutSMTP(w http.ResponseWriter, r *http.Request) {
 
 	smtp, err := a.upsertSMTPConfig(r.Context(), req)
 	if err != nil {
-		writeError(w, mailErrorStatus(err), err.Error())
+		writeMailError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]publicSMTPConfig{"smtp": smtp})
@@ -418,36 +423,16 @@ func (a *app) handleTestEmail(w http.ResponseWriter, r *http.Request) {
 
 	response, err := a.sendMail(r.Context(), req, nil)
 	if err != nil {
-		writeError(w, mailErrorStatus(err), err.Error())
+		writeMailError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, response)
 }
 
 func (a *app) upsertSMTPConfig(ctx context.Context, req smtpConfigRequest) (publicSMTPConfig, error) {
-	current, _, exists, err := a.getSMTPConfig(ctx)
+	cfg, err := a.buildSMTPConfig(ctx, req)
 	if err != nil {
-		return publicSMTPConfig{}, statusError{status: http.StatusInternalServerError, message: "failed to load smtp config"}
-	}
-
-	password := ""
-	if req.Password != nil {
-		password = *req.Password
-	} else if exists {
-		password = current.Password
-	}
-
-	cfg := smtpConfig{
-		Host:       strings.TrimSpace(req.Host),
-		Port:       req.Port,
-		Username:   strings.TrimSpace(req.Username),
-		Password:   password,
-		FromEmail:  strings.TrimSpace(req.FromEmail),
-		FromName:   strings.TrimSpace(req.FromName),
-		Encryption: strings.TrimSpace(req.Encryption),
-	}
-	if cfg.Encryption == "" {
-		cfg.Encryption = defaultEncryption
+		return publicSMTPConfig{}, err
 	}
 
 	if err := validateSMTPConfig(cfg); err != nil {
@@ -641,7 +626,7 @@ func (a *app) handleSendMail(w http.ResponseWriter, r *http.Request) {
 	apiKeyID, _ := r.Context().Value(apiKeyIDContextKey).(int64)
 	response, err := a.sendMail(r.Context(), req, &apiKeyID)
 	if err != nil {
-		writeError(w, mailErrorStatus(err), err.Error())
+		writeMailError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, response)
@@ -727,6 +712,14 @@ func (a *app) sendMail(ctx context.Context, req sendMailRequest, apiKeyID *int64
 		return sendMailResponse{}, statusError{status: http.StatusConflict, message: "smtp config not set"}
 	}
 
+	return a.sendMailWithConfig(ctx, cfg, req, apiKeyID)
+}
+
+func (a *app) sendMailWithConfig(ctx context.Context, cfg smtpConfig, req sendMailRequest, apiKeyID *int64) (sendMailResponse, error) {
+	if err := validateSMTPConfig(cfg); err != nil {
+		return sendMailResponse{}, statusError{status: http.StatusBadRequest, message: err.Error()}
+	}
+
 	message, recipients, err := buildMailMessage(cfg, req, a.now())
 	if err != nil {
 		return sendMailResponse{}, statusError{status: http.StatusBadRequest, message: err.Error()}
@@ -743,6 +736,44 @@ func (a *app) sendMail(ctx context.Context, req sendMailRequest, apiKeyID *int64
 
 	_ = a.logEmail(ctx, apiKeyID, req.Subject, len(recipients), status, errorMessage)
 	return sendMailResponse{Status: status, Recipients: len(recipients)}, nil
+}
+
+func (a *app) buildSMTPConfig(ctx context.Context, req smtpConfigRequest) (smtpConfig, error) {
+	current, _, exists, err := a.getSMTPConfig(ctx)
+	if err != nil {
+		return smtpConfig{}, statusError{status: http.StatusInternalServerError, message: "failed to load smtp config"}
+	}
+
+	password := ""
+	if req.Password != nil {
+		password = *req.Password
+	} else if exists {
+		password = current.Password
+	}
+
+	cfg := smtpConfig{
+		Host:       strings.TrimSpace(req.Host),
+		Port:       req.Port,
+		Username:   strings.TrimSpace(req.Username),
+		Password:   password,
+		FromEmail:  strings.TrimSpace(req.FromEmail),
+		FromName:   strings.TrimSpace(req.FromName),
+		Encryption: strings.TrimSpace(req.Encryption),
+	}
+	if cfg.Encryption == "" {
+		cfg.Encryption = defaultEncryption
+	}
+	return cfg, nil
+}
+
+func emptySMTPConfigRequest(req smtpConfigRequest) bool {
+	return strings.TrimSpace(req.Host) == "" &&
+		req.Port == 0 &&
+		strings.TrimSpace(req.Username) == "" &&
+		req.Password == nil &&
+		strings.TrimSpace(req.FromEmail) == "" &&
+		strings.TrimSpace(req.FromName) == "" &&
+		strings.TrimSpace(req.Encryption) == ""
 }
 
 func (a *app) getSMTPConfig(ctx context.Context) (smtpConfig, string, bool, error) {
@@ -816,6 +847,75 @@ func (a *app) logEmail(ctx context.Context, apiKeyID *int64, subject string, rec
 		a.now().Format(time.RFC3339),
 	)
 	return err
+}
+
+func writeMailError(w http.ResponseWriter, err error) {
+	writeJSON(w, mailErrorStatus(err), smtpErrorPayload(err))
+}
+
+func smtpErrorPayload(err error) map[string]any {
+	status := mailErrorStatus(err)
+	payload := map[string]any{"error": err.Error(), "status": status}
+	diag := smtpDiagnostic(err)
+	if diag.Kind != "" {
+		payload["kind"] = diag.Kind
+	}
+	if diag.Hint != "" {
+		payload["hint"] = diag.Hint
+	}
+	return payload
+}
+
+type smtpDiagnosticResult struct {
+	Kind string
+	Hint string
+}
+
+func smtpDiagnostic(err error) smtpDiagnosticResult {
+	message := strings.TrimSpace(err.Error())
+	lower := strings.ToLower(message)
+	if strings.HasPrefix(lower, "smtp delivery failed: ") {
+		message = strings.TrimSpace(message[len("smtp delivery failed: "):])
+		lower = strings.ToLower(message)
+	}
+	hasSMTPCode := func(code string) bool {
+		return strings.HasPrefix(lower, code+" ") ||
+			strings.Contains(lower, " "+code+" ") ||
+			strings.Contains(lower, ":"+code+" ")
+	}
+
+	switch {
+	case lower == "smtp config not set":
+		return smtpDiagnosticResult{Kind: "config", Hint: "Save the SMTP settings first, then try the test again."}
+	case strings.Contains(lower, "failed to load smtp config") || strings.Contains(lower, "failed to save smtp config"):
+		return smtpDiagnosticResult{Kind: "server", Hint: "Gomail could not read or write the SMTP settings. Check the database and server logs."}
+	case strings.Contains(lower, "host is required") || strings.Contains(lower, "port must be between") || strings.Contains(lower, "from_email is required") || strings.Contains(lower, "from_email is invalid") || strings.Contains(lower, "from_email must be a mailbox address") || strings.Contains(lower, "password is required when username is set") || strings.Contains(lower, "encryption must be one of"):
+		return smtpDiagnosticResult{Kind: "config", Hint: "Fix the SMTP form fields and save again."}
+	case strings.Contains(lower, "subject is required") || strings.Contains(lower, "text or html is required") || strings.Contains(lower, "at least one recipient is required") || strings.Contains(lower, "too many recipients") || strings.Contains(lower, "invalid address") || strings.Contains(lower, "reply_to is invalid"):
+		return smtpDiagnosticResult{Kind: "request", Hint: "Fix the test email fields and try again."}
+	case strings.Contains(lower, "no such host") || strings.Contains(lower, "lookup "):
+		return smtpDiagnosticResult{Kind: "dns", Hint: "The SMTP host cannot be resolved. Check the Host value and DNS."}
+	case strings.Contains(lower, "connection refused") || strings.Contains(lower, "actively refused"):
+		return smtpDiagnosticResult{Kind: "connect", Hint: "The server refused the TCP connection. Check Host, Port, and firewall rules."}
+	case strings.Contains(lower, "i/o timeout") || strings.Contains(lower, "timeout") || strings.Contains(lower, "deadline exceeded"):
+		return smtpDiagnosticResult{Kind: "timeout", Hint: "The SMTP server did not respond in time. Check network access and blocked ports."}
+	case strings.Contains(lower, "does not support starttls"):
+		return smtpDiagnosticResult{Kind: "encryption", Hint: "This server did not advertise STARTTLS. Use STARTTLS on port 587, or TLS / SSL on port 465."}
+	case strings.Contains(lower, "first record does not look like a tls handshake") || strings.Contains(lower, "wrong version number") || strings.Contains(lower, "protocol version"):
+		return smtpDiagnosticResult{Kind: "encryption", Hint: "TLS / SSL is selected for a non-SSL port. Use STARTTLS on port 587 or TLS / SSL on port 465."}
+	case strings.Contains(lower, "x509") || strings.Contains(lower, "certificate") || strings.Contains(lower, "unknown authority") || strings.Contains(lower, "not trusted"):
+		return smtpDiagnosticResult{Kind: "certificate", Hint: "The TLS certificate could not be verified. Check the hostname and certificate chain."}
+	case strings.Contains(lower, "does not advertise auth"):
+		return smtpDiagnosticResult{Kind: "auth", Hint: "The server did not offer SMTP AUTH. Try STARTTLS/TLS, or remove Username if this relay does not need login."}
+	case strings.Contains(lower, "authentication failed") || strings.Contains(lower, "username and password not accepted") || strings.Contains(lower, "invalid login") || hasSMTPCode("535") || hasSMTPCode("534"):
+		return smtpDiagnosticResult{Kind: "auth", Hint: "SMTP authentication failed. Check the username, password, and app password or authorization code."}
+	case strings.Contains(lower, "relay access denied") || strings.Contains(lower, "mailbox unavailable") || strings.Contains(lower, "sender rejected") || strings.Contains(lower, "recipient rejected") || hasSMTPCode("550") || hasSMTPCode("553") || hasSMTPCode("554"):
+		return smtpDiagnosticResult{Kind: "rejected", Hint: "The server rejected the sender or recipient. Check From Email, recipient address, and relay permissions."}
+	case strings.Contains(lower, "connection reset") || strings.Contains(lower, "broken pipe") || strings.Contains(lower, "unexpected eof") || strings.Contains(lower, "eof"):
+		return smtpDiagnosticResult{Kind: "connection", Hint: "The SMTP server closed the connection early. Check the port/encryption pairing and provider limits."}
+	default:
+		return smtpDiagnosticResult{Kind: "smtp", Hint: "Check the SMTP settings, then try the same host/port with another mail client if needed."}
+	}
 }
 
 type scanner interface {

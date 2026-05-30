@@ -572,11 +572,12 @@ func (a *app) goadminSMTPTool(ctx *goadmincontext.Context) (admintypes.Panel, er
 .gm-smtp-grid{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:18px;align-items:start}
 .gm-smtp-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .gm-smtp-fields .full{grid-column:1 / -1}
-.gm-smtp-state{min-height:22px;margin-top:12px;color:#666}
+.gm-smtp-state{min-height:22px;margin-top:12px;color:#666;white-space:pre-line}
 .gm-smtp-state.text-danger{color:#dd4b39}
 .gm-smtp-state.text-success{color:#00a65a}
 .gm-smtp-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px}
 .gm-smtp-badge{font-size:12px;color:#666}
+.gm-smtp-help{font-size:12px;color:#777;margin:6px 0 0;line-height:1.45}
 @media (max-width:991px){.gm-smtp-grid{grid-template-columns:1fr}}
 @media (max-width:640px){.gm-smtp-fields{grid-template-columns:1fr}.gm-smtp-actions .btn{width:100%}}
 </style>
@@ -614,10 +615,11 @@ func (a *app) goadminSMTPTool(ctx *goadmincontext.Context) (admintypes.Panel, er
           <div class="form-group full">
             <label for="gm-smtp-encryption">Encryption</label>
             <select id="gm-smtp-encryption" class="form-control">
-              <option value="starttls">STARTTLS</option>
-              <option value="tls">TLS</option>
-              <option value="none">None</option>
+              <option value="starttls">STARTTLS (587)</option>
+              <option value="tls">TLS / SSL (465)</option>
+              <option value="none">None (25)</option>
             </select>
+            <p class="gm-smtp-help">SSL maps to TLS / SSL here. Use STARTTLS for port 587, TLS / SSL for port 465, and None only for trusted internal SMTP.</p>
           </div>
         </div>
         <div class="gm-smtp-actions">
@@ -643,6 +645,7 @@ func (a *app) goadminSMTPTool(ctx *goadmincontext.Context) (admintypes.Panel, er
           <textarea id="gm-smtp-test-text" class="form-control" rows="6">This is a test email from Gomail.</textarea>
         </div>
         <button id="gm-smtp-test-send" type="button" class="btn btn-success"><i class="fa fa-send"></i> Send Test</button>
+        <p class="gm-smtp-help">The test uses the current form values. If the password box is empty, the saved password is kept.</p>
         <div id="gm-smtp-test-state" class="gm-smtp-state"></div>
       </div>
     </div>
@@ -674,6 +677,57 @@ func (a *app) goadminSMTPTool(ctx *goadmincontext.Context) (admintypes.Panel, er
     el.className = 'gm-smtp-state' + (type ? ' text-' + type : '');
     el.textContent = msg || '';
   }
+  function responseExcerpt(text) {
+    return (text || '').replace(/\s+/g, ' ').trim().slice(0, 180);
+  }
+  function nonJSONMessage(res, text) {
+    if (res.status === 401 || res.status === 403 || /<html|<!doctype|login/i.test(text || '')) {
+      return 'Admin session may have expired. Refresh this page and log in again.';
+    }
+    var msg = 'Expected JSON but received HTTP ' + res.status;
+    var excerpt = responseExcerpt(text);
+    if (excerpt) msg += ': ' + excerpt;
+    return msg;
+  }
+  function requestJSON(url, options) {
+    options = options || {};
+    options.headers = options.headers || {};
+    options.headers.Accept = options.headers.Accept || 'application/json';
+    return fetch(url, options).then(function(res) {
+      return res.text().then(function(text) {
+        var data = {};
+        if (text) {
+          try {
+            data = JSON.parse(text);
+          } catch (parseErr) {
+            var jsonErr = new Error(nonJSONMessage(res, text));
+            jsonErr.status = res.status;
+            throw jsonErr;
+          }
+        }
+        if (!res.ok) {
+          var err = new Error(data.error || ('HTTP ' + res.status + ' request failed'));
+          err.status = data.status || res.status;
+          err.kind = data.kind || '';
+          err.hint = data.hint || '';
+          throw err;
+        }
+        return data;
+      });
+    }).catch(function(err) {
+      if (err && err.name === 'TypeError' && !err.status) {
+        err.message = 'Network request failed. Check that Gomail is reachable, then try again.';
+      }
+      throw err;
+    });
+  }
+  function formatError(err, context) {
+    var lines = [err && err.message ? err.message : 'Request failed'];
+    if (err && err.hint) lines.push('Hint: ' + err.hint);
+    if (err && (err.status || err.kind)) lines.push('Status: ' + (err.status || '-') + (err.kind ? ' / ' + err.kind : ''));
+    if (context) lines.push(context);
+    return lines.join('\n');
+  }
   function applyConfig(smtp) {
     host.value = smtp.host || '';
     port.value = smtp.port || 587;
@@ -687,13 +741,7 @@ func (a *app) goadminSMTPTool(ctx *goadmincontext.Context) (admintypes.Panel, er
   }
   function loadConfig() {
     setState(state, '', 'Loading...');
-    fetch('/admin/tools/smtp/config', {headers:{Accept:'application/json'}})
-      .then(function(res) {
-        return res.json().then(function(data) {
-          if (!res.ok) throw new Error(data.error || 'Request failed');
-          return data;
-        });
-      })
+    requestJSON('/admin/tools/smtp/config')
       .then(function(data) {
         if (data.configured && data.smtp) {
           applyConfig(data.smtp);
@@ -702,7 +750,7 @@ func (a *app) goadminSMTPTool(ctx *goadmincontext.Context) (admintypes.Panel, er
           setState(state, '', '');
         }
       })
-      .catch(function(err) { setState(state, 'danger', err.message); });
+      .catch(function(err) { setState(state, 'danger', formatError(err)); });
   }
   function configPayload() {
     var payload = {
@@ -719,23 +767,27 @@ func (a *app) goadminSMTPTool(ctx *goadmincontext.Context) (admintypes.Panel, er
   function saveConfig() {
     saveBtn.disabled = true;
     setState(state, '', 'Saving...');
-    fetch('/admin/tools/smtp/config', {
+    requestJSON('/admin/tools/smtp/config', {
       method: 'POST',
       headers: {'Content-Type':'application/json', Accept:'application/json'},
       body: JSON.stringify(configPayload())
     })
-      .then(function(res) {
-        return res.json().then(function(data) {
-          if (!res.ok) throw new Error(data.error || 'Request failed');
-          return data;
-        });
-      })
       .then(function(data) {
         if (data.smtp) applyConfig(data.smtp);
         setState(state, 'success', 'Saved');
       })
-      .catch(function(err) { setState(state, 'danger', err.message); })
+      .catch(function(err) { setState(state, 'danger', formatError(err)); })
       .finally(function() { saveBtn.disabled = false; });
+  }
+  function testConfigPayload() {
+    var payload = configPayload();
+    if (!password.value) delete payload.password;
+    return payload;
+  }
+  function currentConfigSummary() {
+    var selected = encryption.options[encryption.selectedIndex];
+    var label = selected ? selected.text : encryption.value;
+    return 'Current config: ' + (host.value.trim() || '-') + ':' + (port.value || '-') + ' / ' + label;
   }
   function sendTest() {
     var to = testTo.value.trim();
@@ -745,25 +797,19 @@ func (a *app) goadminSMTPTool(ctx *goadmincontext.Context) (admintypes.Panel, er
     }
     testBtn.disabled = true;
     setState(testState, '', 'Sending...');
-    fetch('/admin/tools/smtp/test', {
+    var payload = testConfigPayload();
+    payload.to = [to];
+    payload.subject = testSubject.value.trim();
+    payload.text = testText.value;
+    requestJSON('/admin/tools/smtp/test', {
       method: 'POST',
       headers: {'Content-Type':'application/json', Accept:'application/json'},
-      body: JSON.stringify({
-        to: [to],
-        subject: testSubject.value.trim(),
-        text: testText.value
-      })
+      body: JSON.stringify(payload)
     })
-      .then(function(res) {
-        return res.json().then(function(data) {
-          if (!res.ok) throw new Error(data.error || 'Request failed');
-          return data;
-        });
-      })
       .then(function(data) {
         setState(testState, 'success', 'Sent to ' + (data.recipients || 0) + ' recipient(s)');
       })
-      .catch(function(err) { setState(testState, 'danger', err.message); })
+      .catch(function(err) { setState(testState, 'danger', formatError(err, currentConfigSummary())); })
       .finally(function() { testBtn.disabled = false; });
   }
   saveBtn.addEventListener('click', saveConfig);
@@ -805,14 +851,14 @@ func (a *app) goadminSMTPSaveData(ctx *goadmincontext.Context) {
 
 	smtp, err := a.upsertSMTPConfig(ctx.Request.Context(), req)
 	if err != nil {
-		ctx.JSON(mailErrorStatus(err), map[string]interface{}{"error": err.Error()})
+		ctx.JSON(mailErrorStatus(err), smtpErrorPayload(err))
 		return
 	}
 	ctx.JSON(http.StatusOK, map[string]interface{}{"smtp": smtp})
 }
 
 func (a *app) goadminSMTPTestData(ctx *goadmincontext.Context) {
-	var req sendMailRequest
+	var req smtpTestRequest
 	if err := decodeJSON(ctx.Request, &req); err != nil {
 		ctx.JSON(http.StatusBadRequest, map[string]interface{}{"error": err.Error()})
 		return
@@ -824,9 +870,19 @@ func (a *app) goadminSMTPTestData(ctx *goadmincontext.Context) {
 		req.Text = "This is a test email from Gomail."
 	}
 
-	response, err := a.sendMail(ctx.Request.Context(), req, nil)
+	var response sendMailResponse
+	var err error
+	if emptySMTPConfigRequest(req.smtpConfigRequest) {
+		response, err = a.sendMail(ctx.Request.Context(), req.sendMailRequest, nil)
+	} else {
+		var cfg smtpConfig
+		cfg, err = a.buildSMTPConfig(ctx.Request.Context(), req.smtpConfigRequest)
+		if err == nil {
+			response, err = a.sendMailWithConfig(ctx.Request.Context(), cfg, req.sendMailRequest, nil)
+		}
+	}
 	if err != nil {
-		ctx.JSON(mailErrorStatus(err), map[string]interface{}{"error": err.Error()})
+		ctx.JSON(mailErrorStatus(err), smtpErrorPayload(err))
 		return
 	}
 	ctx.JSON(http.StatusOK, map[string]interface{}{

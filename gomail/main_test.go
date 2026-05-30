@@ -91,6 +91,91 @@ func TestPutSMTPPreservesPasswordWhenOmitted(t *testing.T) {
 	}
 }
 
+func TestBuildSMTPConfigPreservesSavedPasswordForTestPayload(t *testing.T) {
+	a := newTestApp(t)
+
+	putJSON(t, a, "/api/admin/smtp", `{
+		"host":"smtp.example.com",
+		"port":587,
+		"username":"sender@example.com",
+		"password":"saved-secret",
+		"from_email":"sender@example.com",
+		"from_name":"Gomail",
+		"encryption":"starttls"
+	}`, http.StatusOK)
+
+	cfg, err := a.buildSMTPConfig(context.Background(), smtpConfigRequest{
+		Host:       "smtp-alt.example.com",
+		Port:       465,
+		Username:   "sender@example.com",
+		FromEmail:  "sender@example.com",
+		FromName:   "Gomail",
+		Encryption: "tls",
+	})
+	if err != nil {
+		t.Fatalf("buildSMTPConfig() error = %v", err)
+	}
+	if cfg.Password != "saved-secret" {
+		t.Fatalf("password = %q, want saved password", cfg.Password)
+	}
+	if cfg.Host != "smtp-alt.example.com" || cfg.Encryption != "tls" {
+		t.Fatalf("cfg = %+v, want test request values with saved password", cfg)
+	}
+}
+
+func TestSMTPDiagnosticClassifiesCommonFailures(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		wantKind string
+		wantHint string
+	}{
+		{
+			name:     "dns",
+			err:      statusError{status: http.StatusBadGateway, message: "smtp delivery failed: dial tcp: lookup smtp.invalid: no such host"},
+			wantKind: "dns",
+			wantHint: "Host",
+		},
+		{
+			name:     "ssl on starttls port",
+			err:      statusError{status: http.StatusBadGateway, message: "smtp delivery failed: tls: first record does not look like a TLS handshake"},
+			wantKind: "encryption",
+			wantHint: "STARTTLS",
+		},
+		{
+			name:     "auth",
+			err:      statusError{status: http.StatusBadGateway, message: "smtp delivery failed: 535 5.7.8 Username and Password not accepted"},
+			wantKind: "auth",
+			wantHint: "password",
+		},
+		{
+			name:     "config missing",
+			err:      statusError{status: http.StatusConflict, message: "smtp config not set"},
+			wantKind: "config",
+			wantHint: "Save",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			diag := smtpDiagnostic(tt.err)
+			if diag.Kind != tt.wantKind {
+				t.Fatalf("kind = %q, want %q", diag.Kind, tt.wantKind)
+			}
+			if !strings.Contains(diag.Hint, tt.wantHint) {
+				t.Fatalf("hint = %q, want to contain %q", diag.Hint, tt.wantHint)
+			}
+			payload := smtpErrorPayload(tt.err)
+			if payload["kind"] != tt.wantKind {
+				t.Fatalf("payload kind = %v, want %q", payload["kind"], tt.wantKind)
+			}
+			if payload["status"] != mailErrorStatus(tt.err) {
+				t.Fatalf("payload status = %v, want %d", payload["status"], mailErrorStatus(tt.err))
+			}
+		})
+	}
+}
+
 func TestCreateAPIKeyCanAuthorizeSendPermission(t *testing.T) {
 	a := newTestApp(t)
 
