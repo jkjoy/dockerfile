@@ -144,6 +144,35 @@ func TestAdminQRCodeGeneratesPNG(t *testing.T) {
 	}
 }
 
+func TestHomePageDocumentsAPIs(t *testing.T) {
+	a := newTestApp(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Host = "docs.example.test"
+	res := httptest.NewRecorder()
+
+	a.routes().ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Content-Type"); !strings.Contains(got, "text/html") {
+		t.Fatalf("content-type = %q, want text/html", got)
+	}
+	body := res.Body.String()
+	for _, want := range []string{
+		"Gomail Suite API 调用文档",
+		"http://docs.example.test",
+		"POST /api/v1/mail/send",
+		"GET /api/v1/ip/{ip}",
+		"GET /api/v1/qrcode",
+		"Authorization: Bearer",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("home page missing %q", want)
+		}
+	}
+}
+
 func TestIPLookupUnavailableWhenNotConfigured(t *testing.T) {
 	a := newTestApp(t)
 

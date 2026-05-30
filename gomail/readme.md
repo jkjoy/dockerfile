@@ -41,6 +41,7 @@ docker run -d \
 
 后台地址：
 
+- API 调用文档首页：`http://localhost:8080/`
 - `http://localhost:8080/admin`
 - SMTP 配置与测试：`/admin/tools/smtp`
 - API Key 管理：`/admin/tools/api-keys`

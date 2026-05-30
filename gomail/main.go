@@ -209,6 +209,7 @@ func (a *app) routes() http.Handler {
 		}
 	}
 
+	r.Get("/", a.handleHome)
 	r.Get("/healthz", a.handleHealth)
 	r.Get("/api/admin/smtp", a.requireAdmin(a.handleGetSMTP))
 	r.Put("/api/admin/smtp", a.requireAdmin(a.handlePutSMTP))
