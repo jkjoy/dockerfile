@@ -394,43 +394,12 @@ func (a *app) handlePutSMTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	current, _, exists, err := a.getSMTPConfig(r.Context())
+	smtp, err := a.upsertSMTPConfig(r.Context(), req)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to load smtp config")
+		writeError(w, mailErrorStatus(err), err.Error())
 		return
 	}
-
-	password := ""
-	if req.Password != nil {
-		password = *req.Password
-	} else if exists {
-		password = current.Password
-	}
-
-	cfg := smtpConfig{
-		Host:       strings.TrimSpace(req.Host),
-		Port:       req.Port,
-		Username:   strings.TrimSpace(req.Username),
-		Password:   password,
-		FromEmail:  strings.TrimSpace(req.FromEmail),
-		FromName:   strings.TrimSpace(req.FromName),
-		Encryption: strings.TrimSpace(req.Encryption),
-	}
-	if cfg.Encryption == "" {
-		cfg.Encryption = defaultEncryption
-	}
-
-	if err := validateSMTPConfig(cfg); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	updatedAt := a.now().Format(time.RFC3339)
-	if err := a.saveSMTPConfig(r.Context(), cfg, updatedAt); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to save smtp config")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]publicSMTPConfig{"smtp": publicConfig(cfg, updatedAt)})
+	writeJSON(w, http.StatusOK, map[string]publicSMTPConfig{"smtp": smtp})
 }
 
 func (a *app) handleTestEmail(w http.ResponseWriter, r *http.Request) {
@@ -454,6 +423,43 @@ func (a *app) handleTestEmail(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, response)
 }
 
+func (a *app) upsertSMTPConfig(ctx context.Context, req smtpConfigRequest) (publicSMTPConfig, error) {
+	current, _, exists, err := a.getSMTPConfig(ctx)
+	if err != nil {
+		return publicSMTPConfig{}, statusError{status: http.StatusInternalServerError, message: "failed to load smtp config"}
+	}
+
+	password := ""
+	if req.Password != nil {
+		password = *req.Password
+	} else if exists {
+		password = current.Password
+	}
+
+	cfg := smtpConfig{
+		Host:       strings.TrimSpace(req.Host),
+		Port:       req.Port,
+		Username:   strings.TrimSpace(req.Username),
+		Password:   password,
+		FromEmail:  strings.TrimSpace(req.FromEmail),
+		FromName:   strings.TrimSpace(req.FromName),
+		Encryption: strings.TrimSpace(req.Encryption),
+	}
+	if cfg.Encryption == "" {
+		cfg.Encryption = defaultEncryption
+	}
+
+	if err := validateSMTPConfig(cfg); err != nil {
+		return publicSMTPConfig{}, statusError{status: http.StatusBadRequest, message: err.Error()}
+	}
+
+	updatedAt := a.now().Format(time.RFC3339)
+	if err := a.saveSMTPConfig(ctx, cfg, updatedAt); err != nil {
+		return publicSMTPConfig{}, statusError{status: http.StatusInternalServerError, message: "failed to save smtp config"}
+	}
+	return publicConfig(cfg, updatedAt), nil
+}
+
 func (a *app) handleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	var req createAPIKeyRequest
 	if err := decodeJSON(r, &req); err != nil {
@@ -461,114 +467,20 @@ func (a *app) handleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name := strings.TrimSpace(req.Name)
-	if name == "" {
-		writeError(w, http.StatusBadRequest, "name is required")
-		return
-	}
-	if len(name) > 80 {
-		writeError(w, http.StatusBadRequest, "name is too long")
-		return
-	}
-
-	permissions := req.Permissions
-	if len(permissions) == 0 {
-		permissions = []string{sendMailPerm}
-	}
-	if err := validatePermissions(permissions); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	var expiresAt *string
-	if req.ExpiresAt != nil && strings.TrimSpace(*req.ExpiresAt) != "" {
-		parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(*req.ExpiresAt))
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "expires_at must be RFC3339")
-			return
-		}
-		if !parsed.After(a.now()) {
-			writeError(w, http.StatusBadRequest, "expires_at must be in the future")
-			return
-		}
-		normalized := parsed.UTC().Format(time.RFC3339)
-		expiresAt = &normalized
-	}
-
-	plainKey, hash, prefix, err := generateAPIKey()
+	response, err := a.createAPIKey(r.Context(), req)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to generate api key")
+		writeError(w, mailErrorStatus(err), err.Error())
 		return
 	}
-
-	permsJSON, err := json.Marshal(permissions)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to encode permissions")
-		return
-	}
-
-	createdAt := a.now().Format(time.RFC3339)
-	result, err := a.db.ExecContext(
-		r.Context(),
-		`INSERT INTO api_keys (name, key_hash, key_prefix, permissions, created_at, expires_at)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		name,
-		hash,
-		prefix,
-		string(permsJSON),
-		createdAt,
-		nullableString(expiresAt),
-	)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to save api key")
-		return
-	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to read api key id")
-		return
-	}
-
-	writeJSON(w, http.StatusCreated, createAPIKeyResponse{
-		APIKey: apiKeyRecord{
-			ID:          id,
-			Name:        name,
-			Prefix:      prefix,
-			Permissions: permissions,
-			CreatedAt:   createdAt,
-			ExpiresAt:   expiresAt,
-		},
-		Key: plainKey,
-	})
+	writeJSON(w, http.StatusCreated, response)
 }
 
 func (a *app) handleListAPIKeys(w http.ResponseWriter, r *http.Request) {
-	rows, err := a.db.QueryContext(
-		r.Context(),
-		`SELECT id, name, key_prefix, permissions, created_at, expires_at, revoked_at, last_used_at
-		 FROM api_keys ORDER BY id DESC`,
-	)
+	keys, err := a.listAPIKeys(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list api keys")
 		return
 	}
-	defer rows.Close()
-
-	keys := make([]apiKeyRecord, 0)
-	for rows.Next() {
-		record, err := scanAPIKeyRecord(rows)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to read api key")
-			return
-		}
-		keys = append(keys, record)
-	}
-	if err := rows.Err(); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to list api keys")
-		return
-	}
-
 	writeJSON(w, http.StatusOK, map[string][]apiKeyRecord{"api_keys": keys})
 }
 
@@ -583,27 +495,139 @@ func (a *app) handleRevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := a.revokeAPIKey(r.Context(), id); err != nil {
+		writeError(w, mailErrorStatus(err), err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *app) createAPIKey(ctx context.Context, req createAPIKeyRequest) (createAPIKeyResponse, error) {
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		return createAPIKeyResponse{}, statusError{status: http.StatusBadRequest, message: "name is required"}
+	}
+	if len(name) > 80 {
+		return createAPIKeyResponse{}, statusError{status: http.StatusBadRequest, message: "name is too long"}
+	}
+
+	permissions := normalizePermissions(req.Permissions)
+	if len(permissions) == 0 {
+		permissions = []string{sendMailPerm}
+	}
+	if err := validatePermissions(permissions); err != nil {
+		return createAPIKeyResponse{}, statusError{status: http.StatusBadRequest, message: err.Error()}
+	}
+
+	expiresAt, err := a.parseAPIKeyExpiresAt(req.ExpiresAt)
+	if err != nil {
+		return createAPIKeyResponse{}, err
+	}
+
+	plainKey, hash, prefix, err := generateAPIKey()
+	if err != nil {
+		return createAPIKeyResponse{}, statusError{status: http.StatusInternalServerError, message: "failed to generate api key"}
+	}
+
+	permsJSON, err := json.Marshal(permissions)
+	if err != nil {
+		return createAPIKeyResponse{}, statusError{status: http.StatusInternalServerError, message: "failed to encode permissions"}
+	}
+
+	createdAt := a.now().Format(time.RFC3339)
 	result, err := a.db.ExecContext(
-		r.Context(),
+		ctx,
+		`INSERT INTO api_keys (name, key_hash, key_prefix, permissions, created_at, expires_at)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		name,
+		hash,
+		prefix,
+		string(permsJSON),
+		createdAt,
+		nullableString(expiresAt),
+	)
+	if err != nil {
+		return createAPIKeyResponse{}, statusError{status: http.StatusInternalServerError, message: "failed to save api key"}
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return createAPIKeyResponse{}, statusError{status: http.StatusInternalServerError, message: "failed to read api key id"}
+	}
+
+	return createAPIKeyResponse{
+		APIKey: apiKeyRecord{
+			ID:          id,
+			Name:        name,
+			Prefix:      prefix,
+			Permissions: permissions,
+			CreatedAt:   createdAt,
+			ExpiresAt:   expiresAt,
+		},
+		Key: plainKey,
+	}, nil
+}
+
+func (a *app) parseAPIKeyExpiresAt(value *string) (*string, error) {
+	if value == nil || strings.TrimSpace(*value) == "" {
+		return nil, nil
+	}
+
+	parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(*value))
+	if err != nil {
+		return nil, statusError{status: http.StatusBadRequest, message: "expires_at must be RFC3339"}
+	}
+	if !parsed.After(a.now()) {
+		return nil, statusError{status: http.StatusBadRequest, message: "expires_at must be in the future"}
+	}
+	normalized := parsed.UTC().Format(time.RFC3339)
+	return &normalized, nil
+}
+
+func (a *app) listAPIKeys(ctx context.Context) ([]apiKeyRecord, error) {
+	rows, err := a.db.QueryContext(
+		ctx,
+		`SELECT id, name, key_prefix, permissions, created_at, expires_at, revoked_at, last_used_at
+		 FROM api_keys ORDER BY id DESC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	keys := make([]apiKeyRecord, 0)
+	for rows.Next() {
+		record, err := scanAPIKeyRecord(rows)
+		if err != nil {
+			return nil, err
+		}
+		keys = append(keys, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return keys, nil
+}
+
+func (a *app) revokeAPIKey(ctx context.Context, id int64) error {
+	result, err := a.db.ExecContext(
+		ctx,
 		`UPDATE api_keys SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL`,
 		a.now().Format(time.RFC3339),
 		id,
 	)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to revoke api key")
-		return
+		return statusError{status: http.StatusInternalServerError, message: "failed to revoke api key"}
 	}
 	affected, err := result.RowsAffected()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to read revoke result")
-		return
+		return statusError{status: http.StatusInternalServerError, message: "failed to read revoke result"}
 	}
 	if affected == 0 {
-		writeError(w, http.StatusNotFound, "active api key not found")
-		return
+		return statusError{status: http.StatusNotFound, message: "active api key not found"}
 	}
-
-	w.WriteHeader(http.StatusNoContent)
+	return nil
 }
 
 func (a *app) handleSendMail(w http.ResponseWriter, r *http.Request) {
@@ -875,6 +899,17 @@ func validatePermissions(permissions []string) error {
 		seen[permission] = true
 	}
 	return nil
+}
+
+func normalizePermissions(permissions []string) []string {
+	out := make([]string, 0, len(permissions))
+	for _, permission := range permissions {
+		permission = strings.TrimSpace(permission)
+		if permission != "" {
+			out = append(out, permission)
+		}
+	}
+	return out
 }
 
 func supportedPermission(permission string) bool {

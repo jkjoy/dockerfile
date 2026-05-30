@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	goadminconfig "github.com/GoAdminGroup/go-admin/modules/config"
 )
 
 func TestBuildMailMessageDoesNotExposeBcc(t *testing.T) {
@@ -199,12 +201,57 @@ func TestMigrateGoAdminSeedsAdminAndMenus(t *testing.T) {
 		t.Fatalf("tool menu count = %d, want 2", toolMenuCount)
 	}
 
+	var smtpURI string
+	if err := db.QueryRow(`SELECT uri FROM goadmin_menu WHERE id = 101`).Scan(&smtpURI); err != nil {
+		t.Fatalf("query smtp menu uri: %v", err)
+	}
+	if smtpURI != "/tools/smtp" {
+		t.Fatalf("smtp menu uri = %q, want /tools/smtp", smtpURI)
+	}
+
+	var apiKeysURI string
+	if err := db.QueryRow(`SELECT uri FROM goadmin_menu WHERE id = 102`).Scan(&apiKeysURI); err != nil {
+		t.Fatalf("query api keys menu uri: %v", err)
+	}
+	if apiKeysURI != "/tools/api-keys" {
+		t.Fatalf("api keys menu uri = %q, want /tools/api-keys", apiKeysURI)
+	}
+
+	if _, err := db.Exec(`INSERT INTO goadmin_site ("key", value, state) VALUES ('index_url', '/admin', 1)`); err != nil {
+		t.Fatalf("insert stale index_url: %v", err)
+	}
+	if err := migrateGoAdmin(context.Background(), db, "admin", "secret"); err != nil {
+		t.Fatalf("second migrateGoAdmin() error = %v", err)
+	}
+	var indexURL string
+	if err := db.QueryRow(`SELECT value FROM goadmin_site WHERE "key" = 'index_url'`).Scan(&indexURL); err != nil {
+		t.Fatalf("query index_url: %v", err)
+	}
+	if indexURL != "/" {
+		t.Fatalf("persisted index_url = %q, want /", indexURL)
+	}
+
 	var permCount int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM goadmin_user_permissions WHERE user_id = 1 AND permission_id = 1`).Scan(&permCount); err != nil {
 		t.Fatalf("query permission count: %v", err)
 	}
 	if permCount != 1 {
 		t.Fatalf("permission count = %d, want 1", permCount)
+	}
+}
+
+func TestGoAdminIndexURLDoesNotDoublePrefix(t *testing.T) {
+	a := newTestApp(t)
+	a.goAdminDBPath = filepath.Join(t.TempDir(), "goadmin.db")
+
+	cfg := a.goadminConfig()
+	if cfg.IndexUrl != "/" {
+		t.Fatalf("IndexUrl = %q, want /", cfg.IndexUrl)
+	}
+
+	goadminconfig.Initialize(&cfg)
+	if got := goadminconfig.Get().GetIndexURL(); got != "/admin" {
+		t.Fatalf("GetIndexURL() = %q, want /admin", got)
 	}
 }
 

@@ -42,8 +42,8 @@ docker run -d \
 后台地址：
 
 - `http://localhost:8080/admin`
-- SMTP 配置：`/admin/info/smtp_config`
-- API Key 查看：`/admin/info/api_keys`
+- SMTP 配置与测试：`/admin/tools/smtp`
+- API Key 管理：`/admin/tools/api-keys`
 - 发信日志：`/admin/info/email_logs`
 - IP 查询工具：`/admin/tools/ip`
 - 二维码工具：`/admin/tools/qrcode`
@@ -103,7 +103,7 @@ docker run -d \
 更新 SMTP 时如果不传 `password`，会保留旧密码。
 如果 `username` 为空，则允许不配置密码，适合无需认证的 SMTP relay。
 
-也可以在 GoAdmin 后台的 `SMTP Config` 页面维护 SMTP 配置。编辑时密码框留空表示保留旧密码。
+也可以在 GoAdmin 后台的 `SMTP Config` 页面维护 SMTP 配置并发送测试邮件。编辑时密码框留空表示保留旧密码。
 
 ### 查看 SMTP
 

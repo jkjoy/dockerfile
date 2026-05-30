@@ -160,6 +160,15 @@ func migrateGoAdmin(ctx context.Context, db *sql.DB, username, password string) 
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
+	if _, err := db.ExecContext(ctx,
+		`UPDATE goadmin_site
+		 SET value = '/', updated_at = ?
+		 WHERE "key" = 'index_url' AND value IN ('/admin', 'admin')`,
+		now,
+	); err != nil {
+		return err
+	}
+
 	adminHash := goadminauth.EncodePassword([]byte(password))
 	if adminHash == "" {
 		return errors.New("failed to hash goadmin password")
@@ -289,8 +298,8 @@ func migrateGoAdmin(ctx context.Context, db *sql.DB, username, password string) 
 		icon  string
 		uri   string
 	}{
-		{101, 1, "SMTP Config", "fa-cog", "/info/smtp_config"},
-		{102, 2, "API Keys", "fa-key", "/info/api_keys"},
+		{101, 1, "SMTP Config", "fa-cog", "/tools/smtp"},
+		{102, 2, "API Keys", "fa-key", "/tools/api-keys"},
 		{103, 3, "Email Logs", "fa-list", "/info/email_logs"},
 	}
 	for _, row := range menuRows {
@@ -307,6 +316,14 @@ func migrateGoAdmin(ctx context.Context, db *sql.DB, username, password string) 
 	}
 	_, err = db.ExecContext(ctx, `INSERT OR IGNORE INTO goadmin_role_menu (role_id, menu_id, created_at, updated_at)
 		VALUES (1, 100, ?, ?)`, now, now)
+	if err != nil {
+		return err
+	}
+	_, err = db.ExecContext(ctx, `UPDATE goadmin_menu SET uri = '/tools/smtp', updated_at = ? WHERE id = 101`, now)
+	if err != nil {
+		return err
+	}
+	_, err = db.ExecContext(ctx, `UPDATE goadmin_menu SET uri = '/tools/api-keys', updated_at = ? WHERE id = 102`, now)
 	if err != nil {
 		return err
 	}
@@ -349,7 +366,35 @@ func (a *app) mountGoAdmin(router chi.Router) error {
 	}
 
 	eng := engine.Default()
-	cfg := goadminconfig.Config{
+	cfg := a.goadminConfig()
+
+	admin := adminplugin.NewAdmin(a.goadminGenerators())
+	if err := eng.AddConfig(&cfg).
+		AddPlugins(admin).
+		AddDisplayFilterXssJsFilter().
+		Use(router); err != nil {
+		return err
+	}
+
+	eng.HTML("GET", "/admin", a.goadminDashboard)
+	eng.HTML("GET", "/admin/tools/smtp", a.goadminSMTPTool)
+	eng.Data("GET", "/admin/tools/smtp/config", a.goadminSMTPConfigData)
+	eng.Data("POST", "/admin/tools/smtp/config", a.goadminSMTPSaveData)
+	eng.Data("POST", "/admin/tools/smtp/test", a.goadminSMTPTestData)
+	eng.HTML("GET", "/admin/tools/api-keys", a.goadminAPIKeysTool)
+	eng.Data("GET", "/admin/tools/api-keys/list", a.goadminAPIKeysListData)
+	eng.Data("POST", "/admin/tools/api-keys/create", a.goadminAPIKeysCreateData)
+	eng.Data("POST", "/admin/tools/api-keys/revoke", a.goadminAPIKeysRevokeData)
+	eng.HTML("GET", "/admin/tools/ip", a.goadminIPTool)
+	eng.HTML("GET", "/admin/tools/qrcode", a.goadminQRCodeTool)
+	eng.Data("GET", "/admin/tools/ip/lookup", a.goadminIPLookupData)
+	eng.Data("GET", "/admin/tools/qrcode/render", a.goadminQRCodeData)
+	eng.Data("POST", "/admin/tools/qrcode/render", a.goadminQRCodeData)
+	return nil
+}
+
+func (a *app) goadminConfig() goadminconfig.Config {
+	return goadminconfig.Config{
 		Databases: goadminconfig.DatabaseList{
 			"default": {
 				File:         a.goAdminDBPath,
@@ -361,7 +406,7 @@ func (a *app) mountGoAdmin(router chi.Router) error {
 		UrlPrefix:                     goAdminPrefix,
 		Store:                         goadminconfig.Store{Path: "./uploads", Prefix: "uploads"},
 		Language:                      language.CN,
-		IndexUrl:                      "/admin",
+		IndexUrl:                      "/",
 		LoginTitle:                    goAdminDashboardTitle,
 		Title:                         goAdminDashboardTitle,
 		Logo:                          htmltmpl.HTML("Gomail"),
@@ -376,22 +421,6 @@ func (a *app) mountGoAdmin(router chi.Router) error {
 		HidePluginEntrance:            true,
 		HideVisitorUserCenterEntrance: true,
 	}
-
-	admin := adminplugin.NewAdmin(a.goadminGenerators())
-	if err := eng.AddConfig(&cfg).
-		AddPlugins(admin).
-		AddDisplayFilterXssJsFilter().
-		Use(router); err != nil {
-		return err
-	}
-
-	eng.HTML("GET", "/admin", a.goadminDashboard)
-	eng.HTML("GET", "/admin/tools/ip", a.goadminIPTool)
-	eng.HTML("GET", "/admin/tools/qrcode", a.goadminQRCodeTool)
-	eng.Data("GET", "/admin/tools/ip/lookup", a.goadminIPLookupData)
-	eng.Data("GET", "/admin/tools/qrcode/render", a.goadminQRCodeData)
-	eng.Data("POST", "/admin/tools/qrcode/render", a.goadminQRCodeData)
-	return nil
 }
 
 func (a *app) goadminGenerators() admintable.GeneratorList {
@@ -423,21 +452,21 @@ func (a *app) goadminDashboard(ctx *goadmincontext.Context) (admintypes.Panel, e
     <div class="small-box bg-aqua">
       <div class="inner"><h3>%s</h3><p>SMTP</p></div>
       <div class="icon"><i class="fa fa-envelope"></i></div>
-      <a href="/admin/info/smtp_config" class="small-box-footer">Open <i class="fa fa-arrow-circle-right"></i></a>
+      <a href="/admin/tools/smtp" class="small-box-footer">Open <i class="fa fa-arrow-circle-right"></i></a>
     </div>
   </div>
   <div class="col-lg-2 col-sm-4 col-xs-6">
     <div class="small-box bg-green">
       <div class="inner"><h3>%d</h3><p>API Keys</p></div>
       <div class="icon"><i class="fa fa-key"></i></div>
-      <a href="/admin/info/api_keys" class="small-box-footer">Open <i class="fa fa-arrow-circle-right"></i></a>
+      <a href="/admin/tools/api-keys" class="small-box-footer">Open <i class="fa fa-arrow-circle-right"></i></a>
     </div>
   </div>
   <div class="col-lg-2 col-sm-4 col-xs-6">
     <div class="small-box bg-yellow">
       <div class="inner"><h3>%d</h3><p>Active Keys</p></div>
       <div class="icon"><i class="fa fa-shield"></i></div>
-      <a href="/admin/info/api_keys" class="small-box-footer">Open <i class="fa fa-arrow-circle-right"></i></a>
+      <a href="/admin/tools/api-keys" class="small-box-footer">Open <i class="fa fa-arrow-circle-right"></i></a>
     </div>
   </div>
   <div class="col-lg-2 col-sm-4 col-xs-6">
@@ -483,8 +512,8 @@ func (a *app) goadminDashboard(ctx *goadmincontext.Context) (admintypes.Panel, e
       <div class="box-body">
         <a class="btn btn-app" href="/admin/tools/ip"><i class="fa fa-map-marker"></i> IP Lookup</a>
         <a class="btn btn-app" href="/admin/tools/qrcode"><i class="fa fa-qrcode"></i> QR Code</a>
-        <a class="btn btn-app" href="/admin/info/smtp_config"><i class="fa fa-cog"></i> SMTP</a>
-        <a class="btn btn-app" href="/admin/info/api_keys"><i class="fa fa-key"></i> Keys</a>
+        <a class="btn btn-app" href="/admin/tools/smtp"><i class="fa fa-cog"></i> SMTP</a>
+        <a class="btn btn-app" href="/admin/tools/api-keys"><i class="fa fa-key"></i> Keys</a>
       </div>
     </div>
   </div>
@@ -535,6 +564,540 @@ func (a *app) dashboardStats(ctx context.Context) (dashboardStats, error) {
 		return stats, err
 	}
 	return stats, nil
+}
+
+func (a *app) goadminSMTPTool(ctx *goadmincontext.Context) (admintypes.Panel, error) {
+	content := `
+<style>
+.gm-smtp-grid{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:18px;align-items:start}
+.gm-smtp-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.gm-smtp-fields .full{grid-column:1 / -1}
+.gm-smtp-state{min-height:22px;margin-top:12px;color:#666}
+.gm-smtp-state.text-danger{color:#dd4b39}
+.gm-smtp-state.text-success{color:#00a65a}
+.gm-smtp-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px}
+.gm-smtp-badge{font-size:12px;color:#666}
+@media (max-width:991px){.gm-smtp-grid{grid-template-columns:1fr}}
+@media (max-width:640px){.gm-smtp-fields{grid-template-columns:1fr}.gm-smtp-actions .btn{width:100%}}
+</style>
+<div id="gm-smtp-tool">
+  <div class="gm-smtp-grid">
+    <div class="box box-solid">
+      <div class="box-header with-border"><h3 class="box-title"><i class="fa fa-cog"></i> SMTP Config</h3></div>
+      <div class="box-body">
+        <div class="gm-smtp-fields">
+          <div class="form-group">
+            <label for="gm-smtp-host">Host</label>
+            <input id="gm-smtp-host" class="form-control" type="text" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label for="gm-smtp-port">Port</label>
+            <input id="gm-smtp-port" class="form-control" type="number" min="1" max="65535" value="587">
+          </div>
+          <div class="form-group">
+            <label for="gm-smtp-username">Username</label>
+            <input id="gm-smtp-username" class="form-control" type="text" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label for="gm-smtp-password">Password</label>
+            <input id="gm-smtp-password" class="form-control" type="password" autocomplete="new-password">
+            <div id="gm-smtp-password-state" class="gm-smtp-badge"></div>
+          </div>
+          <div class="form-group">
+            <label for="gm-smtp-from-email">From Email</label>
+            <input id="gm-smtp-from-email" class="form-control" type="email" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label for="gm-smtp-from-name">From Name</label>
+            <input id="gm-smtp-from-name" class="form-control" type="text" autocomplete="off">
+          </div>
+          <div class="form-group full">
+            <label for="gm-smtp-encryption">Encryption</label>
+            <select id="gm-smtp-encryption" class="form-control">
+              <option value="starttls">STARTTLS</option>
+              <option value="tls">TLS</option>
+              <option value="none">None</option>
+            </select>
+          </div>
+        </div>
+        <div class="gm-smtp-actions">
+          <button id="gm-smtp-save" type="button" class="btn btn-primary"><i class="fa fa-save"></i> Save</button>
+          <button id="gm-smtp-reload" type="button" class="btn btn-default"><i class="fa fa-refresh"></i> Reload</button>
+        </div>
+        <div id="gm-smtp-state" class="gm-smtp-state"></div>
+      </div>
+    </div>
+    <div class="box box-solid">
+      <div class="box-header with-border"><h3 class="box-title"><i class="fa fa-paper-plane"></i> Test Email</h3></div>
+      <div class="box-body">
+        <div class="form-group">
+          <label for="gm-smtp-test-to">To</label>
+          <input id="gm-smtp-test-to" class="form-control" type="email" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label for="gm-smtp-test-subject">Subject</label>
+          <input id="gm-smtp-test-subject" class="form-control" type="text" value="Gomail SMTP test">
+        </div>
+        <div class="form-group">
+          <label for="gm-smtp-test-text">Text</label>
+          <textarea id="gm-smtp-test-text" class="form-control" rows="6">This is a test email from Gomail.</textarea>
+        </div>
+        <button id="gm-smtp-test-send" type="button" class="btn btn-success"><i class="fa fa-send"></i> Send Test</button>
+        <div id="gm-smtp-test-state" class="gm-smtp-state"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var root = document.getElementById('gm-smtp-tool');
+  if (!root || root.dataset.ready) return;
+  root.dataset.ready = '1';
+  var host = root.querySelector('#gm-smtp-host');
+  var port = root.querySelector('#gm-smtp-port');
+  var username = root.querySelector('#gm-smtp-username');
+  var password = root.querySelector('#gm-smtp-password');
+  var passwordState = root.querySelector('#gm-smtp-password-state');
+  var fromEmail = root.querySelector('#gm-smtp-from-email');
+  var fromName = root.querySelector('#gm-smtp-from-name');
+  var encryption = root.querySelector('#gm-smtp-encryption');
+  var saveBtn = root.querySelector('#gm-smtp-save');
+  var reloadBtn = root.querySelector('#gm-smtp-reload');
+  var state = root.querySelector('#gm-smtp-state');
+  var testTo = root.querySelector('#gm-smtp-test-to');
+  var testSubject = root.querySelector('#gm-smtp-test-subject');
+  var testText = root.querySelector('#gm-smtp-test-text');
+  var testBtn = root.querySelector('#gm-smtp-test-send');
+  var testState = root.querySelector('#gm-smtp-test-state');
+
+  function setState(el, type, msg) {
+    el.className = 'gm-smtp-state' + (type ? ' text-' + type : '');
+    el.textContent = msg || '';
+  }
+  function applyConfig(smtp) {
+    host.value = smtp.host || '';
+    port.value = smtp.port || 587;
+    username.value = smtp.username || '';
+    fromEmail.value = smtp.from_email || '';
+    fromName.value = smtp.from_name || '';
+    encryption.value = smtp.encryption || 'starttls';
+    password.value = '';
+    passwordState.textContent = smtp.password_set ? 'Password saved' : '';
+    if (!testTo.value && smtp.from_email) testTo.value = smtp.from_email;
+  }
+  function loadConfig() {
+    setState(state, '', 'Loading...');
+    fetch('/admin/tools/smtp/config', {headers:{Accept:'application/json'}})
+      .then(function(res) {
+        return res.json().then(function(data) {
+          if (!res.ok) throw new Error(data.error || 'Request failed');
+          return data;
+        });
+      })
+      .then(function(data) {
+        if (data.configured && data.smtp) {
+          applyConfig(data.smtp);
+          setState(state, 'success', 'Ready');
+        } else {
+          setState(state, '', '');
+        }
+      })
+      .catch(function(err) { setState(state, 'danger', err.message); });
+  }
+  function configPayload() {
+    var payload = {
+      host: host.value.trim(),
+      port: Number(port.value),
+      username: username.value.trim(),
+      from_email: fromEmail.value.trim(),
+      from_name: fromName.value.trim(),
+      encryption: encryption.value
+    };
+    if (password.value) payload.password = password.value;
+    return payload;
+  }
+  function saveConfig() {
+    saveBtn.disabled = true;
+    setState(state, '', 'Saving...');
+    fetch('/admin/tools/smtp/config', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json', Accept:'application/json'},
+      body: JSON.stringify(configPayload())
+    })
+      .then(function(res) {
+        return res.json().then(function(data) {
+          if (!res.ok) throw new Error(data.error || 'Request failed');
+          return data;
+        });
+      })
+      .then(function(data) {
+        if (data.smtp) applyConfig(data.smtp);
+        setState(state, 'success', 'Saved');
+      })
+      .catch(function(err) { setState(state, 'danger', err.message); })
+      .finally(function() { saveBtn.disabled = false; });
+  }
+  function sendTest() {
+    var to = testTo.value.trim();
+    if (!to) {
+      setState(testState, 'danger', 'To is required');
+      return;
+    }
+    testBtn.disabled = true;
+    setState(testState, '', 'Sending...');
+    fetch('/admin/tools/smtp/test', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json', Accept:'application/json'},
+      body: JSON.stringify({
+        to: [to],
+        subject: testSubject.value.trim(),
+        text: testText.value
+      })
+    })
+      .then(function(res) {
+        return res.json().then(function(data) {
+          if (!res.ok) throw new Error(data.error || 'Request failed');
+          return data;
+        });
+      })
+      .then(function(data) {
+        setState(testState, 'success', 'Sent to ' + (data.recipients || 0) + ' recipient(s)');
+      })
+      .catch(function(err) { setState(testState, 'danger', err.message); })
+      .finally(function() { testBtn.disabled = false; });
+  }
+  saveBtn.addEventListener('click', saveConfig);
+  reloadBtn.addEventListener('click', loadConfig);
+  testBtn.addEventListener('click', sendTest);
+  loadConfig();
+})();
+</script>`
+
+	return admintypes.Panel{
+		Title:       htmltmpl.HTML("SMTP Config"),
+		Description: htmltmpl.HTML("SMTP delivery settings and test email"),
+		Content:     htmltmpl.HTML(content),
+	}, nil
+}
+
+func (a *app) goadminSMTPConfigData(ctx *goadmincontext.Context) {
+	cfg, updatedAt, ok, err := a.getSMTPConfig(ctx.Request.Context())
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, map[string]interface{}{"error": "failed to load smtp config"})
+		return
+	}
+	if !ok {
+		ctx.JSON(http.StatusOK, map[string]interface{}{"configured": false})
+		return
+	}
+	ctx.JSON(http.StatusOK, map[string]interface{}{
+		"configured": true,
+		"smtp":       publicConfig(cfg, updatedAt),
+	})
+}
+
+func (a *app) goadminSMTPSaveData(ctx *goadmincontext.Context) {
+	var req smtpConfigRequest
+	if err := decodeJSON(ctx.Request, &req); err != nil {
+		ctx.JSON(http.StatusBadRequest, map[string]interface{}{"error": err.Error()})
+		return
+	}
+
+	smtp, err := a.upsertSMTPConfig(ctx.Request.Context(), req)
+	if err != nil {
+		ctx.JSON(mailErrorStatus(err), map[string]interface{}{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, map[string]interface{}{"smtp": smtp})
+}
+
+func (a *app) goadminSMTPTestData(ctx *goadmincontext.Context) {
+	var req sendMailRequest
+	if err := decodeJSON(ctx.Request, &req); err != nil {
+		ctx.JSON(http.StatusBadRequest, map[string]interface{}{"error": err.Error()})
+		return
+	}
+	if req.Subject == "" {
+		req.Subject = "Gomail test email"
+	}
+	if req.Text == "" && req.HTML == "" {
+		req.Text = "This is a test email from Gomail."
+	}
+
+	response, err := a.sendMail(ctx.Request.Context(), req, nil)
+	if err != nil {
+		ctx.JSON(mailErrorStatus(err), map[string]interface{}{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, map[string]interface{}{
+		"status":     response.Status,
+		"recipients": response.Recipients,
+	})
+}
+
+func (a *app) goadminAPIKeysTool(ctx *goadmincontext.Context) (admintypes.Panel, error) {
+	content := `
+<style>
+.gm-key-grid{display:grid;grid-template-columns:360px minmax(0,1fr);gap:18px;align-items:start}
+.gm-key-perms{display:grid;gap:8px;margin-top:6px}
+.gm-key-state{min-height:22px;margin-top:12px;color:#666}
+.gm-key-state.text-danger{color:#dd4b39}
+.gm-key-result{display:none;margin-top:14px}
+.gm-key-result textarea{font-family:Menlo,Consolas,monospace;resize:vertical}
+.gm-key-table td,.gm-key-table th{vertical-align:middle!important}
+.gm-key-table code{font-size:12px}
+.gm-key-actions{white-space:nowrap}
+@media (max-width:991px){.gm-key-grid{grid-template-columns:1fr}}
+</style>
+<div id="gm-api-keys-tool">
+  <div class="gm-key-grid">
+    <div class="box box-solid">
+      <div class="box-header with-border"><h3 class="box-title"><i class="fa fa-key"></i> New API Key</h3></div>
+      <div class="box-body">
+        <div class="form-group">
+          <label for="gm-key-name">Name</label>
+          <input id="gm-key-name" class="form-control" type="text" maxlength="80" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>Permissions</label>
+          <div class="gm-key-perms">
+            <label><input type="checkbox" value="send:mail" checked> send:mail</label>
+            <label><input type="checkbox" value="lookup:ip"> lookup:ip</label>
+            <label><input type="checkbox" value="generate:qrcode"> generate:qrcode</label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="gm-key-expires">Expires At</label>
+          <input id="gm-key-expires" class="form-control" type="datetime-local">
+        </div>
+        <button id="gm-key-create" type="button" class="btn btn-primary"><i class="fa fa-plus"></i> Create</button>
+        <div id="gm-key-state" class="gm-key-state"></div>
+        <div id="gm-key-result" class="gm-key-result">
+          <label for="gm-key-plain">Plain Key</label>
+          <textarea id="gm-key-plain" class="form-control" rows="3" readonly></textarea>
+          <button id="gm-key-copy" type="button" class="btn btn-default btn-sm" style="margin-top:8px"><i class="fa fa-copy"></i> Copy</button>
+        </div>
+      </div>
+    </div>
+    <div class="box box-solid">
+      <div class="box-header with-border">
+        <h3 class="box-title"><i class="fa fa-list"></i> API Keys</h3>
+        <div class="box-tools"><button id="gm-key-refresh" class="btn btn-box-tool" type="button"><i class="fa fa-refresh"></i></button></div>
+      </div>
+      <div class="box-body table-responsive no-padding">
+        <table class="table table-striped gm-key-table">
+          <thead><tr><th>ID</th><th>Name</th><th>Prefix</th><th>Permissions</th><th>Created</th><th>Status</th><th></th></tr></thead>
+          <tbody id="gm-key-list"><tr><td colspan="7">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var root = document.getElementById('gm-api-keys-tool');
+  if (!root || root.dataset.ready) return;
+  root.dataset.ready = '1';
+  var nameInput = root.querySelector('#gm-key-name');
+  var expiresInput = root.querySelector('#gm-key-expires');
+  var createBtn = root.querySelector('#gm-key-create');
+  var refreshBtn = root.querySelector('#gm-key-refresh');
+  var state = root.querySelector('#gm-key-state');
+  var result = root.querySelector('#gm-key-result');
+  var plain = root.querySelector('#gm-key-plain');
+  var copyBtn = root.querySelector('#gm-key-copy');
+  var list = root.querySelector('#gm-key-list');
+
+  function text(value) {
+    if (value === undefined || value === null) return '';
+    return String(value);
+  }
+  function esc(value) {
+    return text(value).replace(/[&<>"']/g, function(ch) {
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
+    });
+  }
+  function selectedPermissions() {
+    return Array.prototype.slice.call(root.querySelectorAll('.gm-key-perms input:checked')).map(function(input) {
+      return input.value;
+    });
+  }
+  function expiresValue() {
+    if (!expiresInput.value) return null;
+    var date = new Date(expiresInput.value);
+    if (isNaN(date.getTime())) return 'invalid';
+    return date.toISOString();
+  }
+  function keyStatus(key) {
+    if (key.revoked_at) return '<span class="label label-default">Revoked</span>';
+    if (key.expires_at && new Date(key.expires_at).getTime() <= Date.now()) return '<span class="label label-warning">Expired</span>';
+    return '<span class="label label-success">Active</span>';
+  }
+  function renderKeys(keys) {
+    if (!keys || !keys.length) {
+      list.innerHTML = '<tr><td colspan="7">No API keys</td></tr>';
+      return;
+    }
+    list.innerHTML = keys.map(function(key) {
+      var disabled = key.revoked_at ? ' disabled' : '';
+      return '<tr>' +
+        '<td>' + esc(key.id) + '</td>' +
+        '<td>' + esc(key.name) + '</td>' +
+        '<td><code>' + esc(key.prefix) + '</code></td>' +
+        '<td>' + esc((key.permissions || []).join(', ')) + '</td>' +
+        '<td>' + esc(key.created_at) + '</td>' +
+        '<td>' + keyStatus(key) + '</td>' +
+        '<td class="gm-key-actions"><button class="btn btn-xs btn-danger gm-key-revoke" data-id="' + esc(key.id) + '"' + disabled + '><i class="fa fa-ban"></i> Revoke</button></td>' +
+      '</tr>';
+    }).join('');
+  }
+  function loadKeys() {
+    list.innerHTML = '<tr><td colspan="7">Loading...</td></tr>';
+    fetch('/admin/tools/api-keys/list', {headers:{Accept:'application/json'}})
+      .then(function(res) {
+        return res.json().then(function(data) {
+          if (!res.ok) throw new Error(data.error || 'Request failed');
+          return data;
+        });
+      })
+      .then(function(data) { renderKeys(data.api_keys || []); })
+      .catch(function(err) {
+        list.innerHTML = '<tr><td colspan="7">' + esc(err.message) + '</td></tr>';
+      });
+  }
+  function createKey() {
+    var name = nameInput.value.trim();
+    var expires = expiresValue();
+    var permissions = selectedPermissions();
+    if (!name) {
+      state.className = 'gm-key-state text-danger';
+      state.textContent = 'Name is required';
+      return;
+    }
+    if (!permissions.length) {
+      state.className = 'gm-key-state text-danger';
+      state.textContent = 'Select at least one permission';
+      return;
+    }
+    if (expires === 'invalid') {
+      state.className = 'gm-key-state text-danger';
+      state.textContent = 'Expires At is invalid';
+      return;
+    }
+    createBtn.disabled = true;
+    state.className = 'gm-key-state';
+    state.textContent = 'Creating...';
+    result.style.display = 'none';
+    fetch('/admin/tools/api-keys/create', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json', Accept:'application/json'},
+      body: JSON.stringify({name:name, permissions:permissions, expires_at:expires})
+    })
+      .then(function(res) {
+        return res.json().then(function(data) {
+          if (!res.ok) throw new Error(data.error || 'Request failed');
+          return data;
+        });
+      })
+      .then(function(data) {
+        plain.value = data.key || '';
+        result.style.display = 'block';
+        state.textContent = 'Created';
+        nameInput.value = '';
+        loadKeys();
+      })
+      .catch(function(err) {
+        state.className = 'gm-key-state text-danger';
+        state.textContent = err.message;
+      })
+      .finally(function() { createBtn.disabled = false; });
+  }
+  function revokeKey(id) {
+    fetch('/admin/tools/api-keys/revoke', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json', Accept:'application/json'},
+      body: JSON.stringify({id:Number(id)})
+    })
+      .then(function(res) {
+        if (res.status === 204) return;
+        return res.json().then(function(data) {
+          if (!res.ok) throw new Error(data.error || 'Request failed');
+        });
+      })
+      .then(loadKeys)
+      .catch(function(err) {
+        state.className = 'gm-key-state text-danger';
+        state.textContent = err.message;
+      });
+  }
+  createBtn.addEventListener('click', createKey);
+  refreshBtn.addEventListener('click', loadKeys);
+  copyBtn.addEventListener('click', function() {
+    plain.select();
+    navigator.clipboard && navigator.clipboard.writeText(plain.value);
+  });
+  list.addEventListener('click', function(event) {
+    var btn = event.target.closest('.gm-key-revoke');
+    if (btn && btn.dataset.id) revokeKey(btn.dataset.id);
+  });
+  nameInput.addEventListener('keydown', function(event) {
+    if (event.key === 'Enter') createKey();
+  });
+  loadKeys();
+})();
+</script>`
+
+	return admintypes.Panel{
+		Title:       htmltmpl.HTML("API Keys"),
+		Description: htmltmpl.HTML("Create, view, and revoke API keys"),
+		Content:     htmltmpl.HTML(content),
+	}, nil
+}
+
+func (a *app) goadminAPIKeysListData(ctx *goadmincontext.Context) {
+	keys, err := a.listAPIKeys(ctx.Request.Context())
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, map[string]interface{}{"error": "failed to list api keys"})
+		return
+	}
+	ctx.JSON(http.StatusOK, map[string]interface{}{"api_keys": keys})
+}
+
+func (a *app) goadminAPIKeysCreateData(ctx *goadmincontext.Context) {
+	var req createAPIKeyRequest
+	if err := decodeJSON(ctx.Request, &req); err != nil {
+		ctx.JSON(http.StatusBadRequest, map[string]interface{}{"error": err.Error()})
+		return
+	}
+
+	response, err := a.createAPIKey(ctx.Request.Context(), req)
+	if err != nil {
+		ctx.JSON(mailErrorStatus(err), map[string]interface{}{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusCreated, map[string]interface{}{
+		"api_key": response.APIKey,
+		"key":     response.Key,
+	})
+}
+
+func (a *app) goadminAPIKeysRevokeData(ctx *goadmincontext.Context) {
+	var req struct {
+		ID int64 `json:"id"`
+	}
+	if err := decodeJSON(ctx.Request, &req); err != nil {
+		ctx.JSON(http.StatusBadRequest, map[string]interface{}{"error": err.Error()})
+		return
+	}
+	if req.ID <= 0 {
+		ctx.JSON(http.StatusBadRequest, map[string]interface{}{"error": "invalid api key id"})
+		return
+	}
+	if err := a.revokeAPIKey(ctx.Request.Context(), req.ID); err != nil {
+		ctx.JSON(mailErrorStatus(err), map[string]interface{}{"error": err.Error()})
+		return
+	}
+	ctx.Data(http.StatusNoContent, "application/json", nil)
 }
 
 func (a *app) goadminIPTool(ctx *goadmincontext.Context) (admintypes.Panel, error) {
