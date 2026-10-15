@@ -1,6 +1,10 @@
 # Docker Images
 Dockerfile
 
+## QQ 官方机器人通知服务
+
+[qq-official-bot](qq-official-bot/README.md)：通过 QQ 官方机器人向私聊和群聊发送主动通知，提供事件验签、一次性口令绑定、持久消息队列及 Typecho Enhancement 插件接入说明。
+
 ## QQ weather bot
 
 仅支持nonebot2
