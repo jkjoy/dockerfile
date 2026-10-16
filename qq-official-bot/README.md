@@ -134,7 +134,7 @@ curl --fail-with-body --silent --show-error \
 | `qq_official_targets` | 每行一个已绑定别名，例如 `owner` 和 `blog-group` |
 | `qq_official_include_links` | 根据 QQ 平台的消息 URL 报备结果选择是否携带网站链接 |
 
-继续使用插件已有的评论通知、友链通知开关。官方模式将通知提交给本服务的持久队列，由后台发送；插件保留原有 QQ 通知方式。**AppSecret 只填写在 Bot 服务中**。
+继续使用插件已有的评论通知、友链通知开关。官方模式将通知提交给本服务的持久队列，由后台发送。Enhancement 1.4.1 起仅支持本官方服务和 OpenClaw / Hermes QQ 通道，已移除旧 go-cqhttp 推送方式；原用户需重新选择并配置通道。**AppSecret 只填写在 Bot 服务中**。
 
 先通过插件的测试通知确认目标和权限，再开启所需通知类型。
 
