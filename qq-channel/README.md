@@ -1,6 +1,8 @@
 # 独立 QQ 双向通道
 
-通过腾讯 [qqbot-nodejs SDK](https://github.com/tencent-connect/qqbot-nodejs) 连接 QQ 官方机器人，给 Typecho Enhancement 1.5.0+ 提供私聊、群聊主动通知和固定博客管理指令。无需安装 OpenClaw、Hermes 或配置模型。常驻 Node.js 服务使用 WebSocket 接收官方事件，插件经 HTTP 提交通知，管理指令经 HMAC 签名回传插件。
+通过腾讯 [qqbot-nodejs SDK](https://github.com/tencent-connect/qqbot-nodejs) 连接 QQ 官方机器人，给 Typecho Enhancement 1.5.0+ 提供私聊、群聊主动通知和固定博客管理指令。无需模型。常驻 Node.js 服务使用 WebSocket 接收官方事件，插件经 HTTP 提交通知，管理指令经 HMAC 签名回传插件。
+
+Enhancement 1.5.2 起仅保留「独立 QQ 通道」和「官方 QQ Bot 服务（Webhook）」，已移除 OpenClaw / Hermes 复用模式。使用本服务时选择「独立 QQ 通道」；已有绑定和管理指令配置继续有效。
 
 ## 准备与启动
 
@@ -241,7 +243,7 @@ curl --fail-with-body --silent --show-error "$BOT_SERVICE_URL/api/notifications"
 1. 私聊发送 `我的ID`，群内 @机器人发送 `我的ID`，取得需要授权的用户 OpenID 和群 OpenID。
 2. 再生成一个不同的随机密钥。在 `.env` 或 `compose.yaml` 的 `environment` 中填写 `ENHANCEMENT_COMMAND_SECRET`、`QQ_ALLOWED_USERS`（逗号分隔，最多 20 个），以及允许群管理时的 `QQ_ALLOWED_GROUPS`。用户和群分别校验：允许的群内也只有允许的用户能操作。
 3. 将博客指令接口填入 `ENHANCEMENT_COMMAND_URL`，例如 `https://blog.example.com/action/enhancement-edit?do=qq-agent-command`。未启用伪静态时保留 `/index.php/action/`，子目录安装也需保留完整路径及 `?do=qq-agent-command`。
-4. 插件中开启“允许 QQ 侧管理博客”，填写相同的指令密钥、允许的用户 OpenID（每行一个）和执行身份的 Typecho 管理员 UID。无需填写 Agent 接口 URL、Agent 通知凭据、Agent 接收目标等项目。
+4. 插件中开启“允许 QQ 侧管理博客”，填写相同的指令密钥、允许的用户 OpenID（每行一个）和执行身份的 Typecho 管理员 UID。
 5. 执行 `docker compose up -d --force-recreate`，向机器人发送 `博客状态` 验证。
 
 只需通知时，保持 `ENHANCEMENT_COMMAND_URL/SECRET` 为空及插件管理开关关闭。QQ 服务的密钥、白名单及插件管理开关均需满足才可操作；命令拒绝时检查两边配置。QQ 服务到博客需可达，远程使用 HTTPS。

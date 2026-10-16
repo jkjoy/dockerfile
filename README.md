@@ -3,7 +3,7 @@ Dockerfile
 
 ## 独立 QQ 双向通道
 
-[qq-channel](qq-channel/README.md)：使用腾讯 Node.js SDK，通过 WebSocket 提供 QQ 私聊、群聊通知及固定博客管理指令。无需 OpenClaw、Hermes 或模型，无需公网事件回调地址；支持持久队列、目标绑定、白名单、签名回调和 Typecho Enhancement 1.5.0+。
+[qq-channel](qq-channel/README.md)：使用腾讯 Node.js SDK，通过 WebSocket 提供 QQ 私聊、群聊通知及固定博客管理指令。无需模型或公网事件回调地址；支持持久队列、目标绑定、白名单、签名回调和 Typecho Enhancement 1.5.0+。
 
 ## QQ 官方机器人通知服务
 
