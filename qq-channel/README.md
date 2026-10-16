@@ -16,8 +16,11 @@ openssl rand -hex 32
 
 把 AppID、AppSecret 和新生成的随机值填入 `.env` 的 `BOT_API_TOKEN`。首次可先不配置管理指令。
 
+Compose 使用已发布的 `jkjoy/qq-channel:latest` 镜像，支持 amd64 和 arm64。
+
 ```bash
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 docker compose logs --tail=50 qq-channel
 curl http://127.0.0.1:8080/readyz
 ```
@@ -106,7 +109,7 @@ SQLite 保存绑定、通知目标快照、每个目标的投递状态及入站�
 
 博客操作的请求 ID 由官方消息身份稳定生成。博客操作成功后先保存结果再回复 QQ，回复失败不会重新执行博客操作；结果不确定时提示到后台核对。网络中断可能造成 QQ 重复送达，采用至少一次投递语义，不能保证腾讯侧绝不重复。
 
-数据保存在 Compose 的 `channel-data` 命名卷。升级用 `docker compose up -d --build`；备份前先 `docker compose stop`，再备份卷中 SQLite 文件，避免遗漏 WAL。不要在升级时执行 `down -v`。替换 AppID 应使用新数据卷并重新绑定，服务会拒绝启动到其他 AppID 的旧卷。
+数据保存在 Compose 的 `channel-data` 命名卷。升级用 `docker compose pull && docker compose up -d`；备份前先 `docker compose stop`，再备份卷中 SQLite 文件，避免遗漏 WAL。不要在升级时执行 `down -v`。替换 AppID 应使用新数据卷并重新绑定，服务会拒绝启动到其他 AppID 的旧卷。
 
 主动通知仍受机器人资质、接口权限、好友/入群关系、主动接收设置、频控和消息域名限制。收到绑定回复不代表已取得主动发送权限；失败状态中仅保存脱敏错误代码，服务日志不会记录 AppSecret、令牌或评论正文。
 

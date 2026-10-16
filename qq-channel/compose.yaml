@@ -1,7 +1,6 @@
 services:
   qq-channel:
-    build: .
-    image: qq-channel:local
+    image: jkjoy/qq-channel:latest
     restart: unless-stopped
     init: true
     env_file:
