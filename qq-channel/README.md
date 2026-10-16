@@ -6,7 +6,11 @@
 
 1. 在 [QQ 开放平台](https://q.qq.com/) 创建机器人，取得 AppID/AppSecret，开通私聊、群聊及相应主动发送权限。按控制台当前要求启用 WebSocket 事件接入、配置测试成员/群或发布范围、出口 IP 白名单。此服务使用 `C2C_MESSAGE_CREATE` 和 `GROUP_AT_MESSAGE_CREATE`，群内指令需 @机器人。
 2. 将机器人加为好友、加入目标群，并按平台要求允许主动消息。消息包含 URL 时还需完成消息域名报备。
-3. 在服务器复制本目录，执行：
+3. 按下面任意一种方式配置。Compose 使用已发布的 `jkjoy/qq-channel:latest` 镜像，支持 amd64 和 arm64。
+
+### 使用 `.env` 文件
+
+在服务器复制本目录，执行：
 
 ```bash
 cp .env.example .env
@@ -16,7 +20,52 @@ openssl rand -hex 32
 
 把 AppID、AppSecret 和新生成的随机值填入 `.env` 的 `BOT_API_TOKEN`。首次可先不配置管理指令。
 
-Compose 使用已发布的 `jkjoy/qq-channel:latest` 镜像，支持 amd64 和 arm64。
+### 不使用 `.env` 文件
+
+在部署目录新建 `compose.yaml`，或用下面内容替换仓库中的 `compose.yaml`。移除原有的 `env_file` 配置，否则 Compose 仍会要求提供 `.env`。
+
+先执行 `openssl rand -hex 32` 生成 `BOT_API_TOKEN`，再将下面三个必填项 `QQ_APP_ID`、`QQ_APP_SECRET`、`BOT_API_TOKEN` 替换为实际值：
+
+```yaml
+services:
+  qq-channel:
+    image: jkjoy/qq-channel:latest
+    restart: unless-stopped
+    init: true
+    environment:
+      QQ_APP_ID: "替换为机器人AppID"
+      QQ_APP_SECRET: "替换为机器人AppSecret"
+      BOT_API_TOKEN: "替换为生成的随机密钥"
+      BOT_HOST: "0.0.0.0"
+      BOT_PORT: "8080"
+      BOT_DATA_DIR: "/data"
+      # 仅需通知时留空；开启 QQ 管理时按下文配置，群白名单可留空。
+      ENHANCEMENT_COMMAND_URL: ""
+      ENHANCEMENT_COMMAND_SECRET: ""
+      QQ_ALLOWED_USERS: ""
+      QQ_ALLOWED_GROUPS: ""
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - channel-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 20s
+
+volumes:
+  channel-data:
+```
+
+配置值包含 `$` 时，在 Compose 中写成 `$$`，避免被当作变量替换。执行 `chmod 600 compose.yaml` 限制凭据文件的读取权限。
+
+### 启动和检查
+
+两种方式均在 `compose.yaml` 所在目录执行：
 
 ```bash
 docker compose pull
@@ -31,7 +80,7 @@ curl http://127.0.0.1:8080/readyz
 
 ## 绑定私聊与群聊
 
-在当前 shell 设置访问令牌（与 `.env` 一致），随后申请私聊绑定口令：
+在当前 shell 设置访问令牌（与服务配置的 `BOT_API_TOKEN` 一致），随后申请私聊绑定口令：
 
 ```bash
 read -rs -p 'BOT_API_TOKEN: ' BOT_API_TOKEN; echo
@@ -70,7 +119,7 @@ curl -sS http://127.0.0.1:8080/api/targets \
 ## 开启 QQ 管理
 
 1. 私聊发送 `我的ID`，群内 @机器人发送 `我的ID`，取得需要授权的用户 OpenID 和群 OpenID。
-2. 再生成一个不同的随机密钥。在 `.env` 填写 `ENHANCEMENT_COMMAND_SECRET`、`QQ_ALLOWED_USERS`（逗号分隔，最多 20 个），以及允许群管理时的 `QQ_ALLOWED_GROUPS`。用户和群分别校验：允许的群内也只有允许的用户能操作。
+2. 再生成一个不同的随机密钥。在 `.env` 或 `compose.yaml` 的 `environment` 中填写 `ENHANCEMENT_COMMAND_SECRET`、`QQ_ALLOWED_USERS`（逗号分隔，最多 20 个），以及允许群管理时的 `QQ_ALLOWED_GROUPS`。用户和群分别校验：允许的群内也只有允许的用户能操作。
 3. 将博客指令接口填入 `ENHANCEMENT_COMMAND_URL`，例如 `https://blog.example.com/action/enhancement-edit?do=qq-agent-command`。未启用伪静态时保留 `/index.php/action/`，子目录安装也需保留完整路径及 `?do=qq-agent-command`。
 4. 插件中开启“允许 QQ 侧管理博客”，填写相同的指令密钥、允许的用户 OpenID（每行一个）和执行身份的 Typecho 管理员 UID。无需填写 Agent 接口 URL、Agent 通知凭据、Agent 接收目标等项目。
 5. 执行 `docker compose up -d --force-recreate`，向机器人发送 `博客状态` 验证。
