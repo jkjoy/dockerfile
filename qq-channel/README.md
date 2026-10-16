@@ -68,7 +68,7 @@ curl -sS http://127.0.0.1:8080/api/targets \
 
 1. 私聊发送 `我的ID`，群内 @机器人发送 `我的ID`，取得需要授权的用户 OpenID 和群 OpenID。
 2. 再生成一个不同的随机密钥。在 `.env` 填写 `ENHANCEMENT_COMMAND_SECRET`、`QQ_ALLOWED_USERS`（逗号分隔，最多 20 个），以及允许群管理时的 `QQ_ALLOWED_GROUPS`。用户和群分别校验：允许的群内也只有允许的用户能操作。
-3. 将插件 QQ 设置显示的完整“QQ 指令接口”填入 `ENHANCEMENT_COMMAND_URL`，包括 `?do=qq-agent-command`。例如 `https://blog.example.com/action/enhancement-edit?do=qq-agent-command`；关闭重写的网站地址可能包含 `index.php`，请直接复制后台显示的值。
+3. 将博客指令接口填入 `ENHANCEMENT_COMMAND_URL`，例如 `https://blog.example.com/action/enhancement-edit?do=qq-agent-command`。未启用伪静态时保留 `/index.php/action/`，子目录安装也需保留完整路径及 `?do=qq-agent-command`。
 4. 插件中开启“允许 QQ 侧管理博客”，填写相同的指令密钥、允许的用户 OpenID（每行一个）和执行身份的 Typecho 管理员 UID。无需填写 Agent 接口 URL、Agent 通知凭据、Agent 接收目标等项目。
 5. 执行 `docker compose up -d --force-recreate`，向机器人发送 `博客状态` 验证。
 
