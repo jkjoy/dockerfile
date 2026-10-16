@@ -1,0 +1,27 @@
+services:
+  qq-channel:
+    build: .
+    image: qq-channel:local
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env
+    environment:
+      BOT_HOST: 0.0.0.0
+      BOT_PORT: "8080"
+      BOT_DATA_DIR: /data
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - channel-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 20s
+
+volumes:
+  channel-data:

@@ -1,0 +1,14 @@
+{
+  "name": "enhancement-qq-channel",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "start": "node src/main.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@tencent-connect/qqbot-nodejs": "1.0.5"
+  }
+}

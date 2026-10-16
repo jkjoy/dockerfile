@@ -1,5 +1,7 @@
 # QQ 官方机器人通知服务
 
+需要无需智能体的双向通道、QQ 固定管理指令或 WebSocket 接入时，使用新的 [qq-channel 服务](../qq-channel/README.md)。本目录保留原 Webhook 通知方式；两者在插件中对应不同选项，绑定数据与凭据分别配置。
+
 为 Typecho Enhancement 插件提供 QQ 私聊、群聊主动通知。服务接收 QQ 官方事件回调，验证签名，用一次性口令绑定接收目标，再由持久队列向 `https://api.bot.qq.com` 发送消息。机器人凭据保存在本服务，Typecho 通过独立 API Token 提交通知。
 
 ## 在 QQ 开放平台准备机器人
