@@ -1,6 +1,10 @@
 # Docker Images
 Dockerfile
 
+## Simple PHP Blog
+
+[simple-php-blog](simple-php-blog/README.md)：PHP 8.4 + Apache + SQLite，支持 amd64、arm64，包含安装与持久化验证。镜像为 `jkjoy/simple-php-blog:latest`。
+
 ## 独立 QQ 双向通道
 
 [qq-channel](qq-channel/README.md)：使用腾讯 Node.js SDK，通过 WebSocket 提供 QQ 私聊、群聊通知及固定博客管理指令。无需模型或公网事件回调地址；支持持久队列、目标绑定、白名单、签名回调和 Typecho Enhancement 1.5.0+。

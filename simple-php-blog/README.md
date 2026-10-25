@@ -1,0 +1,51 @@
+# Simple PHP Blog
+
+为 [jkjoy/Simple-PHP-Blog](https://github.com/jkjoy/Simple-PHP-Blog) 提供 PHP 8.4 + Apache 镜像，包含 SQLite、cURL、ZIP、fileinfo、mbstring，以及原项目的伪静态和目录保护规则。
+
+## 启动
+
+```bash
+docker compose -f simple-php-blog/compose.yaml up -d
+```
+
+访问 `http://localhost:8080/install.php`，设置站点信息和管理员账号。安装前后健康检查均可使用。
+
+镜像：`jkjoy/simple-php-blog:latest`。也可使用版本标签（例如 `v1.14.15`）或 `source-<完整源码提交 SHA>` 固定版本。
+
+## 持久化
+
+Compose 为以下五个目录创建命名卷，重建容器后保留内容：
+
+| 容器目录 | 内容 |
+| --- | --- |
+| `/var/www/html/data` | SQLite 数据库、配置、安装锁 |
+| `/var/www/html/cache` | 设置缓存、限流和重置令牌等运行数据 |
+| `/var/www/html/uploads` | 上传附件 |
+| `/var/www/html/themes` | 自定义主题 |
+| `/var/www/html/plugins` | 插件和语言包 |
+
+容器启动时自动设置以上目录的 `www-data` 写入权限，并为首次挂载的空插件目录补充内置语言包。绑定宿主机目录时也使用相同的容器路径；目录需支持修改所有者。备份时同时保存这五个目录，勿执行 `docker compose down -v` 删除数据卷。
+
+通过镜像升级核心程序：
+
+```bash
+docker compose -f simple-php-blog/compose.yaml pull
+docker compose -f simple-php-blog/compose.yaml up -d
+```
+
+后台安装的主题和插件保存在卷中。后台一键更新核心程序只影响当前容器，重建后以所用镜像的版本为准。
+
+## 本地构建与测试
+
+```bash
+docker build -t simple-php-blog:local ./simple-php-blog
+bash simple-php-blog/test.sh simple-php-blog:local
+```
+
+默认源码固定为本地博客当前版本 `v1.14.15`（`bd79a54eaf5967d41ea2178f88ba2ac3b1076638`）。可通过 `--build-arg BLOG_REF=<源码提交或标签>` 指定其他版本。构建仅从上游仓库获取程序文件，不包含本机博客的数据库、配置、缓存或上传内容。
+
+## GitHub Actions
+
+[工作流](../.github/workflows/simple-php-blog.yml) 在此目录或工作流变动时触发，也支持手动填写上游 `blog_ref`（默认 `main`）。工作流先解析为固定提交，再分别在 amd64、arm64 原生 runner 上构建并测试安装、首页、静态资源、伪静态、私有目录保护和重建后的数据保留；全部通过后才发布双架构镜像，并从仓库拉取摘要对应镜像验证源码版本。
+
+推送至本仓库 `main` 或在 `main` 手动运行时发布至 Docker Hub。拉取请求仅执行构建和测试。使用仓库现有 Secrets：`DOCKER_USER_NAME`、`DOCKER_ACCESS_TOKEN`。

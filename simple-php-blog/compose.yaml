@@ -1,0 +1,19 @@
+services:
+  blog:
+    image: jkjoy/simple-php-blog:latest
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - blog-data:/var/www/html/data
+      - blog-cache:/var/www/html/cache
+      - blog-uploads:/var/www/html/uploads
+      - blog-themes:/var/www/html/themes
+      - blog-plugins:/var/www/html/plugins
+
+volumes:
+  blog-data:
+  blog-cache:
+  blog-uploads:
+  blog-themes:
+  blog-plugins:

@@ -1,0 +1,131 @@
+name: Build and publish Simple PHP Blog
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "simple-php-blog/**"
+      - ".github/workflows/simple-php-blog.yml"
+  pull_request:
+    paths:
+      - "simple-php-blog/**"
+      - ".github/workflows/simple-php-blog.yml"
+  workflow_dispatch:
+    inputs:
+      blog_ref:
+        description: "Simple-PHP-Blog branch, tag, or commit to build"
+        required: true
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+      version: ${{ steps.source.outputs.version }}
+    steps:
+      - name: Resolve upstream revision and version
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BLOG_REF: ${{ inputs.blog_ref || 'main' }}
+        run: |
+          sha="$(gh api "repos/jkjoy/Simple-PHP-Blog/commits/$BLOG_REF" --jq .sha)"
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
+          version="$(gh api "repos/jkjoy/Simple-PHP-Blog/contents/index.php?ref=$sha" --jq .content |
+            base64 --decode | sed -n "s/^const APP_VERSION = '\([^']*\)';$/\1/p")"
+          [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: source
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v4
+      - name: Build native test image
+        uses: docker/build-push-action@v7
+        with:
+          context: ./simple-php-blog
+          load: true
+          platforms: linux/${{ matrix.arch }}
+          tags: simple-php-blog:test
+          build-args: BLOG_REF=${{ needs.source.outputs.sha }}
+          cache-from: type=gha,scope=simple-php-blog-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=simple-php-blog-${{ matrix.arch }}
+      - name: Test installation, access protection, and persistence
+        run: bash simple-php-blog/test.sh simple-php-blog:test
+
+  publish:
+    needs: [source, test]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKER_USER_NAME }}
+          password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+      - name: Build and publish both architectures
+        id: publish
+        uses: docker/build-push-action@v7
+        with:
+          context: ./simple-php-blog
+          push: true
+          platforms: linux/amd64,linux/arm64
+          build-args: BLOG_REF=${{ needs.source.outputs.sha }}
+          tags: |
+            ${{ secrets.DOCKER_USER_NAME }}/simple-php-blog:latest
+            ${{ secrets.DOCKER_USER_NAME }}/simple-php-blog:${{ needs.source.outputs.version }}
+            ${{ secrets.DOCKER_USER_NAME }}/simple-php-blog:source-${{ needs.source.outputs.sha }}
+          labels: org.opencontainers.image.version=${{ needs.source.outputs.version }}
+          cache-from: |
+            type=gha,scope=simple-php-blog-amd64
+            type=gha,scope=simple-php-blog-arm64
+            type=gha,scope=simple-php-blog-release
+          cache-to: type=gha,mode=max,scope=simple-php-blog-release
+      - name: Verify published manifest and image
+        env:
+          IMAGE: ${{ secrets.DOCKER_USER_NAME }}/simple-php-blog
+          DIGEST: ${{ steps.publish.outputs.digest }}
+          BLOG_SHA: ${{ needs.source.outputs.sha }}
+          BLOG_VERSION: ${{ needs.source.outputs.version }}
+        run: |
+          docker buildx imagetools inspect "$IMAGE@$DIGEST" --raw > manifest.json
+          for arch in amd64 arm64; do
+            jq -e --arg arch "$arch" '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch)' manifest.json
+          done
+          docker pull "$IMAGE@$DIGEST"
+          test "$(docker image inspect "$IMAGE@$DIGEST" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" = "$BLOG_SHA"
+          docker run --rm --entrypoint php -e BLOG_VERSION "$IMAGE@$DIGEST" -r '
+            $source = file_get_contents("/var/www/html/index.php");
+            exit(str_contains($source, "const APP_VERSION = " . var_export(getenv("BLOG_VERSION"), true) . ";") ? 0 : 1);
+          '
+          {
+            echo "### Simple PHP Blog $BLOG_VERSION"
+            echo "- Source: https://github.com/jkjoy/Simple-PHP-Blog/commit/$BLOG_SHA"
+            echo "- Image: \`$IMAGE@$DIGEST\`"
+            echo "- Platforms: linux/amd64, linux/arm64 (installation and persistence tested on native runners)"
+          } >> "$GITHUB_STEP_SUMMARY"
