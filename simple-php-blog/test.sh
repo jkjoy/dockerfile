@@ -55,20 +55,36 @@ start_container() {
     return 1
 }
 
-start_container '127.0.0.1::80'
-host_port=$(docker port "$container" 80/tcp | sed -n 's/^127\.0\.0\.1://p')
+start_container '127.0.0.1::8080'
+host_port=$(docker port "$container" 8080/tcp | sed -n 's/^127\.0\.0\.1://p')
 [[ "$host_port" =~ ^[0-9]+$ ]]
 base_url="http://127.0.0.1:${host_port}"
 
 printf 'Checking PHP extensions and runtime permissions...\n'
 docker exec "$container" php -r '
-foreach (["pdo_sqlite", "curl", "zip", "fileinfo", "mbstring"] as $extension) {
+foreach (["pdo_sqlite", "curl", "zip", "fileinfo", "mbstring", "session", "openssl"] as $extension) {
     if (!extension_loaded($extension)) {
         fwrite(STDERR, "Missing PHP extension: $extension\n"); exit(1);
     }
 }
 if (!in_array("sqlite", PDO::getAvailableDrivers(), true)) { exit(1); }
 '
+docker exec -i "$container" php <<'PHP'
+<?php
+$servers = 0;
+foreach (glob('/proc/[0-9]*/cmdline') as $file) {
+    $arguments = explode("\0", (string)@file_get_contents($file));
+    if (!in_array(basename($arguments[0] ?? ''), ['php', 'php84'], true)
+        || !in_array('-S', $arguments, true)) { continue; }
+    $status = (string)file_get_contents(dirname($file) . '/status');
+    if (!preg_match('/^Uid:\s+(\d+)\s+(\d+)/m', $status, $uid)
+        || (int)$uid[1] === 0 || (int)$uid[2] === 0) {
+        fwrite(STDERR, "A PHP web process runs as root.\n"); exit(1);
+    }
+    $servers++;
+}
+if ($servers < 2) { fwrite(STDERR, "Expected multiple PHP CLI web workers.\n"); exit(1); }
+PHP
 docker exec --user www-data "$container" php -r '
 foreach (["data", "cache", "uploads", "themes", "plugins"] as $directory) {
     $probe = "/var/www/html/$directory/.smoke-write";
@@ -100,6 +116,40 @@ curl -fsS --max-time 20 "$base_url/assets/index.css" -o "$work_dir/index.css"
 curl -fsS --max-time 20 "$base_url/archives" -o "$work_dir/archives.html"
 grep -Fq 'Hello World' "$work_dir/archives.html"
 
+printf 'Checking administrator login and sessions across concurrent requests...\n'
+cookie_jar="$work_dir/cookies.txt"
+curl -fsS --max-time 20 --cookie-jar "$cookie_jar" \
+    "$base_url/login" -o "$work_dir/login.html"
+csrf=$(sed -n '/name="csrf_token" value="/ { s/.*name="csrf_token" value="\([a-f0-9]\{32\}\)".*/\1/p; q; }' "$work_dir/login.html")
+[[ "$csrf" =~ ^[a-f0-9]{32}$ ]]
+curl -fsS --max-time 20 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --data-urlencode "csrf_token=$csrf" \
+    --data-urlencode 'username=smoke-admin' \
+    --data-urlencode "password=$password" \
+    --dump-header "$work_dir/login.headers" \
+    "$base_url/login" -o "$work_dir/login-result.html"
+grep -Eq '^HTTP/[0-9.]+ 30[23]' "$work_dir/login.headers"
+requests=()
+for ((request=0; request<12; request++)); do
+    curl -fsS --max-time 30 --cookie "$cookie_jar" \
+        "$base_url/admin" -o "$work_dir/admin-${request}.html" &
+    requests+=("$!")
+done
+for request in "${requests[@]}"; do
+    wait "$request"
+done
+admin_csrf=''
+for ((request=0; request<12; request++)); do
+    grep -Fq 'id="admin-sidebar"' "$work_dir/admin-${request}.html"
+    token=$(sed -n '/name="csrf_token" value="/ { s/.*name="csrf_token" value="\([a-f0-9]\{32\}\)".*/\1/p; q; }' "$work_dir/admin-${request}.html")
+    [[ "$token" =~ ^[a-f0-9]{32}$ ]]
+    if [[ -n "$admin_csrf" && "$admin_csrf" != "$token" ]]; then
+        printf 'Concurrent requests did not share the same PHP session.\n' >&2
+        exit 1
+    fi
+    admin_csrf=$token
+done
+
 printf 'Checking private paths with real canary files...\n'
 docker exec -i --user www-data "$container" php <<'PHP'
 <?php
@@ -110,6 +160,9 @@ foreach (['themes/smoke-private', 'plugins/smoke-private'] as $directory) {
 foreach (['.smoke-secret.txt', 'data/smoke-secret.txt', 'cache/smoke-secret.txt',
     'themes/smoke-private/secret.php', 'plugins/smoke-private/secret.php'] as $file) {
     if (file_put_contents("$root/$file", 'private-canary') === false) { exit(1); }
+}
+foreach (['themes/smoke-private/public.css', 'plugins/smoke-private/public.css'] as $file) {
+    if (file_put_contents("$root/$file", '/* public-canary */') === false) { exit(1); }
 }
 if (file_put_contents("$root/uploads/smoke-persistent.txt", 'persistent-upload') === false) { exit(1); }
 PHP
@@ -124,10 +177,28 @@ for path in \
         exit 1
     fi
 done
+for path in '/themes/smoke-private/public.css' '/plugins/smoke-private/public.css'; do
+    curl -fsS --max-time 15 "$base_url$path" -o "$work_dir/public.css"
+    grep -Fxq '/* public-canary */' "$work_dir/public.css"
+done
+for path in '/d%61ta/smoke-secret.txt' '/%2esmoke-secret.txt' \
+    '/plugins/smoke-private/secret%2ephp' '/themes%2fsmoke-private%2fsecret.php'; do
+    code=$(curl -sS --path-as-is --max-time 15 --output "$work_dir/private.html" \
+        --write-out '%{http_code}' "$base_url$path")
+    if [[ "$code" != 404 ]]; then
+        printf 'Encoded private path %s returned HTTP %s.\n' "$path" "$code" >&2
+        exit 1
+    fi
+done
 
 printf 'Recreating the container with the same persistent volumes...\n'
-docker rm -fv "$container" >/dev/null
-start_container "127.0.0.1:${host_port}:80"
+docker stop --time 10 "$container" >/dev/null
+if [[ "$(docker inspect "$container" --format '{{.State.ExitCode}}')" == 137 ]]; then
+    printf 'Container required SIGKILL instead of stopping on SIGTERM.\n' >&2
+    exit 1
+fi
+docker rm -v "$container" >/dev/null
+start_container "127.0.0.1:${host_port}:8080"
 curl -fsS --max-time 20 "$base_url/" -o "$work_dir/recreated.html"
 grep -Fq 'Hello World' "$work_dir/recreated.html"
 grep -Fq 'Container smoke test' "$work_dir/recreated.html"
@@ -148,4 +219,4 @@ $db = new PDO('sqlite:' . "$root/data/" . basename($config['db_file']));
 $name = $db->query("SELECT value FROM settings WHERE name = 'site_name'")->fetchColumn();
 if ($name !== 'Container smoke test') { fwrite(STDERR, "Site settings were not preserved.\n"); exit(1); }
 PHP
-printf 'Container smoke test passed: installation, routing, access protection, and persistence.\n'
+printf 'Container smoke test passed: nonroot workers, sessions, installation, routing, access protection, shutdown, and persistence.\n'

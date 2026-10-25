@@ -3,7 +3,7 @@ Dockerfile
 
 ## Simple PHP Blog
 
-[simple-php-blog](simple-php-blog/README.md)：PHP 8.4 + Apache + SQLite，支持 amd64、arm64，包含安装与持久化验证。镜像为 `jkjoy/simple-php-blog:latest`。
+[simple-php-blog](simple-php-blog/README.md)：Alpine + PHP 8.4 CLI + SQLite，支持 amd64、arm64，包含安装与持久化验证。镜像为 `jkjoy/simple-php-blog:latest`。
 
 ## 独立 QQ 双向通道
 

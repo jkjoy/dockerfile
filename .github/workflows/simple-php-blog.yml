@@ -74,6 +74,14 @@ jobs:
           cache-to: type=gha,mode=max,scope=simple-php-blog-${{ matrix.arch }}
       - name: Test installation, access protection, and persistence
         run: bash simple-php-blog/test.sh simple-php-blog:test
+      - name: Check runtime image size
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          bytes="$(docker image inspect simple-php-blog:test --format '{{.Size}}')"
+          test "$bytes" -lt 104857600
+          echo "Runtime image ($ARCH): $bytes bytes (uncompressed)"
+          echo "- $ARCH runtime image: $bytes bytes (uncompressed; limit 100 MiB)" >> "$GITHUB_STEP_SUMMARY"
 
   publish:
     needs: [source, test]
@@ -98,6 +106,7 @@ jobs:
           build-args: BLOG_REF=${{ needs.source.outputs.sha }}
           tags: |
             ${{ secrets.DOCKER_USER_NAME }}/simple-php-blog:latest
+            ${{ secrets.DOCKER_USER_NAME }}/simple-php-blog:alpine
             ${{ secrets.DOCKER_USER_NAME }}/simple-php-blog:${{ needs.source.outputs.version }}
             ${{ secrets.DOCKER_USER_NAME }}/simple-php-blog:source-${{ needs.source.outputs.sha }}
           labels: org.opencontainers.image.version=${{ needs.source.outputs.version }}
@@ -115,7 +124,9 @@ jobs:
         run: |
           docker buildx imagetools inspect "$IMAGE@$DIGEST" --raw > manifest.json
           for arch in amd64 arm64; do
-            jq -e --arg arch "$arch" '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch)' manifest.json
+            digest="$(jq -er --arg arch "$arch" '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch) | .digest' manifest.json)"
+            bytes="$(docker buildx imagetools inspect "$IMAGE@$digest" --raw | jq '[.layers[].size] | add')"
+            echo "- $arch compressed layers: $bytes bytes" >> "$GITHUB_STEP_SUMMARY"
           done
           docker pull "$IMAGE@$DIGEST"
           test "$(docker image inspect "$IMAGE@$DIGEST" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" = "$BLOG_SHA"

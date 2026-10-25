@@ -1,5 +1,4 @@
 *
 !Dockerfile
-!apache.conf
 !php.ini
 !entrypoint.sh
