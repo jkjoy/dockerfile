@@ -29,20 +29,20 @@ RUN apk add --no-cache \
     && ln -s /usr/bin/php84 /usr/local/bin/php
 
 COPY php.ini /etc/php84/conf.d/99-blog.ini
-COPY --from=source --chown=www-data:www-data /app/ /var/www/html/
+COPY --from=source --chown=www-data:www-data /app/ /app/
 COPY --from=source /app/plugins/ /usr/src/blog-plugins/
 COPY --chmod=755 entrypoint.sh /usr/local/bin/blog-entrypoint
 
-RUN mkdir -p /var/www/html/data /var/www/html/cache /var/www/html/uploads \
+RUN mkdir -p /app/data /app/cache /app/uploads \
     && mkdir -m 700 /tmp/php-sessions \
     && chown www-data:www-data /tmp/php-sessions \
-    && chown -R www-data:www-data /var/www/html
+    && chown -R www-data:www-data /app
 
 ENV PHP_CLI_SERVER_WORKERS=4
-WORKDIR /var/www/html
-VOLUME ["/var/www/html/data", "/var/www/html/cache", "/var/www/html/uploads", "/var/www/html/themes", "/var/www/html/plugins"]
+WORKDIR /app
+VOLUME ["/app/data", "/app/cache", "/app/uploads", "/app/themes", "/app/plugins"]
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD php -r '$context = stream_context_create(["http" => ["timeout" => 3]]); exit(@file_get_contents("http://127.0.0.1:8080/", false, $context) === false ? 1 : 0);'
 ENTRYPOINT ["tini", "-g", "--", "blog-entrypoint"]
-CMD ["php", "-S", "0.0.0.0:8080", "-t", "/var/www/html", "/var/www/html/router.php"]
+CMD ["php", "-S", "0.0.0.0:8080", "-t", "/app", "/app/router.php"]

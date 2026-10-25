@@ -5,11 +5,11 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - blog-data:/var/www/html/data
-      - blog-cache:/var/www/html/cache
-      - blog-uploads:/var/www/html/uploads
-      - blog-themes:/var/www/html/themes
-      - blog-plugins:/var/www/html/plugins
+      - blog-data:/app/data
+      - blog-cache:/app/cache
+      - blog-uploads:/app/uploads
+      - blog-themes:/app/themes
+      - blog-plugins:/app/plugins
 
 volumes:
   blog-data:

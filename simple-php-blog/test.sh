@@ -33,7 +33,7 @@ for directory in data cache uploads themes plugins; do
     volume="${prefix}-${directory}"
     docker volume create "$volume" >/dev/null
     volumes+=("$volume")
-    mounts+=(--mount "type=volume,source=${volume},target=/var/www/html/${directory}")
+    mounts+=(--mount "type=volume,source=${volume},target=/app/${directory}")
 done
 
 start_container() {
@@ -87,7 +87,7 @@ if ($servers < 2) { fwrite(STDERR, "Expected multiple PHP CLI web workers.\n"); 
 PHP
 docker exec --user www-data "$container" php -r '
 foreach (["data", "cache", "uploads", "themes", "plugins"] as $directory) {
-    $probe = "/var/www/html/$directory/.smoke-write";
+    $probe = "/app/$directory/.smoke-write";
     if (file_put_contents($probe, "writable") === false || !unlink($probe)) { exit(1); }
 }
 '
@@ -153,7 +153,7 @@ done
 printf 'Checking private paths with real canary files...\n'
 docker exec -i --user www-data "$container" php <<'PHP'
 <?php
-$root = '/var/www/html';
+$root = '/app';
 foreach (['themes/smoke-private', 'plugins/smoke-private'] as $directory) {
     if (!mkdir("$root/$directory", 0755, true) && !is_dir("$root/$directory")) { exit(1); }
 }
@@ -208,7 +208,7 @@ curl -fsS --max-time 20 "$base_url/uploads/smoke-persistent.txt" -o "$work_dir/u
 grep -Fxq 'persistent-upload' "$work_dir/upload.txt"
 docker exec -i --user www-data "$container" php <<'PHP'
 <?php
-$root = '/var/www/html';
+$root = '/app';
 foreach (['data/install.lock', 'cache/settings.php', 'themes/smoke-private/secret.php',
     'plugins/smoke-private/secret.php', 'plugins/english-language/plugin.php',
     'plugins/russian-language/plugin.php'] as $file) {

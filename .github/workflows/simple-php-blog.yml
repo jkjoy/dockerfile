@@ -131,7 +131,7 @@ jobs:
           docker pull "$IMAGE@$DIGEST"
           test "$(docker image inspect "$IMAGE@$DIGEST" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" = "$BLOG_SHA"
           docker run --rm --entrypoint php -e BLOG_VERSION "$IMAGE@$DIGEST" -r '
-            $source = file_get_contents("/var/www/html/index.php");
+            $source = file_get_contents("/app/index.php");
             exit(str_contains($source, "const APP_VERSION = " . var_export(getenv("BLOG_VERSION"), true) . ";") ? 0 : 1);
           '
           {
