@@ -11,7 +11,8 @@ RUN apk add --no-cache ca-certificates curl tar \
     && tar -xzf /tmp/blog.tar.gz --strip-components=1 -C /source \
     && cd /source \
     && cp .htaccess index.php install.php router.php update.php favicon.png logo.png /app/ \
-    && cp -a assets plugins themes /app/
+    && cp -a assets plugins /app/ \
+    && mkdir /app/themes
 
 FROM php:8.4-apache-bookworm
 
