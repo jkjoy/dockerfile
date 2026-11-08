@@ -6,7 +6,11 @@ on:
       - main
     paths:  
       - 'php85/**'
-      
+      - '.github/workflows/php85.yml'
+  workflow_dispatch:
+  schedule:
+    - cron: '23 3 * * *'  # 每天北京时间 11:23
+
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
@@ -45,6 +49,8 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           push: true
+          pull: true
+          no-cache: true
           context: .
           file: php85/Dockerfile  # 指定 Dockerfile 路径
           platforms: |

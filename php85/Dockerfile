@@ -4,8 +4,8 @@ WORKDIR /app
 
 # Install PHP and dependencies
 RUN apk --no-cache add \
-    php85 \
-    php85-fpm \
+    'php85>=8.5.12' \
+    'php85-fpm>=8.5.12' \
     php85-pdo \
     php85-sqlite3 \
     php85-pdo_pgsql \
@@ -48,6 +48,11 @@ COPY --chown=nginx:nginx php85/start.sh /start.sh
 RUN chmod +x /start.sh \
     && chown -R nginx:nginx /app \
     && ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+
+# Reject vulnerable PHP versions or an inactive session mitigation before publishing.
+RUN php85 -r 'echo "PHP ", PHP_VERSION, PHP_EOL; exit(version_compare(PHP_VERSION, "8.5.12", ">=") && extension_loaded("session") && !ini_get("session.upload_progress.enabled") ? 0 : 1);' \
+    && php-fpm85 -t \
+    && nginx -t
 
 EXPOSE 80 443
 
