@@ -3,7 +3,7 @@ Dockerfile
 
 ## sub2api 图片工作台
 
-[sub2api-image](sub2api-image/README.md)：通过 sub2api 生成图片，提供中文创作界面、图片预览下载、历史搜索分页和提示词复用；Node.js + SQLite，支持 Docker Compose 持久化部署。
+[sub2api-image](sub2api-image/README.md)：通过 sub2api 生成图片，游客/注册/付费用户每日分别可生成 3/10/100 张，支持管理员手动升级账号、个人历史浏览与原图下载；Node.js + SQLite，支持 Docker Compose 持久化部署。
 
 ## Simple PHP Blog
 

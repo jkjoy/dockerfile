@@ -13,6 +13,7 @@ RUN npm ci --omit=dev --ignore-scripts --no-fund --no-audit \
     && chown node:node /app/data
 
 COPY server.mjs ./
+COPY lib ./lib
 COPY public ./public
 
 USER node

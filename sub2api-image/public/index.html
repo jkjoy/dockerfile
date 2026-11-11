@@ -35,26 +35,38 @@
             >0</span
           ></a
         >
+        <a
+          href="#admin"
+          id="admin-nav"
+          class="nav-link"
+          data-page="admin"
+          hidden
+          ><i class="ph ph-users-three" aria-hidden="true"></i>用户管理</a
+        >
       </nav>
       <div class="sidebar-note">
         <i class="ph ph-lightbulb" aria-hidden="true"></i>
         <p>好画面，始于一个想法。<br />试着描述光线、材质与氛围。</p>
       </div>
       <div class="sidebar-bottom">
-        <button class="connection-card" data-action="settings">
+        <button class="connection-card" data-action="account">
           <span class="connection-icon"
-            ><i class="ph ph-plugs-connected" aria-hidden="true"></i></span
+            ><i class="ph ph-user-circle" aria-hidden="true"></i></span
           ><span
-            ><strong>sub2api</strong
-            ><small id="sidebar-status">正在读取配置</small></span
+            ><strong id="sidebar-username">游客创作</strong
+            ><small id="sidebar-status">正在读取额度</small></span
           ><i class="ph ph-caret-right" aria-hidden="true"></i>
         </button>
-        <button class="nav-link settings-nav" data-action="settings">
-          <i class="ph ph-sliders-horizontal" aria-hidden="true"></i>连接设置
+        <button
+          class="nav-link settings-nav"
+          data-action="account"
+          aria-label="我的账号"
+        >
+          <i class="ph ph-user-circle" aria-hidden="true"></i
+          ><span id="account-nav-label">登录 / 注册</span>
         </button>
         <div class="local-note">
-          <i class="ph ph-hard-drives" aria-hidden="true"></i
-          >图片与历史保存于服务器本地
+          <i class="ph ph-hard-drives" aria-hidden="true"></i>仅你可见的创作记录
         </div>
       </div>
     </aside>
@@ -65,13 +77,29 @@
           工作空间<i class="ph ph-caret-right" aria-hidden="true"></i
           ><span id="breadcrumb-page">创作工作台</span>
         </div>
-        <button class="status-button" data-action="settings">
+        <button class="status-button" data-action="account">
           <span id="connection-dot" class="status-dot"></span
-          ><span id="connection-label">连接设置</span
-          ><i class="ph ph-gear-six" aria-hidden="true"></i>
+          ><span id="connection-label">登录 / 注册</span
+          ><i class="ph ph-user-circle" aria-hidden="true"></i>
         </button>
       </header>
       <main id="main">
+        <section class="quota-banner" aria-label="每日创作额度">
+          <span class="quota-emblem"
+            ><i class="ph ph-sparkle" aria-hidden="true"></i
+          ></span>
+          <div>
+            <strong id="quota-title">正在读取今日额度</strong>
+            <p id="quota-description">每天北京时间零点更新</p>
+          </div>
+          <button
+            class="button secondary"
+            id="quota-action"
+            data-action="register"
+          >
+            注册领取每日 10 张
+          </button>
+        </section>
         <section id="studio-page" aria-labelledby="studio-title">
           <div class="page-heading">
             <div>
@@ -85,20 +113,13 @@
               ><i class="ph ph-magic-wand"></i
             ></span>
           </div>
-          <button
-            id="setup-banner"
-            class="setup-banner"
-            data-action="settings"
-            hidden
-          >
+          <div id="setup-banner" class="setup-banner" hidden>
             <i class="ph ph-plugs" aria-hidden="true"></i
             ><span
-              ><strong>先连接你的 sub2api</strong
-              ><span>填写服务地址和 API Key，开始第一张创作。</span></span
-            ><span class="banner-cta"
-              >去设置<i class="ph ph-arrow-up-right" aria-hidden="true"></i
-            ></span>
-          </button>
+              ><strong>生图服务暂未就绪</strong
+              ><span>请联系管理员完成服务配置后再开始创作。</span></span
+            >
+          </div>
           <div class="workspace">
             <form id="generation-form" class="composer panel">
               <div class="panel-heading">
@@ -135,30 +156,14 @@
               </div>
               <div class="form-divider"></div>
               <div class="field">
-                <label for="model"
-                  >生成模型<button
-                    type="button"
-                    id="load-models"
-                    class="text-button"
-                    title="从 sub2api 获取可用图片模型"
-                  >
-                    <i class="ph ph-arrows-clockwise" aria-hidden="true"></i
-                    >获取模型
-                  </button></label
-                ><input
-                  id="model"
-                  name="model"
-                  list="model-options"
-                  value="gpt-image-2"
-                  maxlength="120"
-                  placeholder="输入模型名称"
-                  required
-                /><datalist id="model-options">
-                  <option value="gpt-image-2"></option>
-                  <option value="gpt-image-1.5"></option>
-                  <option value="gpt-image-1"></option>
-                  <option value="dall-e-3"></option>
-                </datalist>
+                <span class="field-label">生成模型</span>
+                <div class="model-value">
+                  <i class="ph ph-cpu" aria-hidden="true"></i
+                  ><span id="model-name">正在读取</span><small>统一提供</small>
+                </div>
+                <p class="field-help" id="basic-mode-note" hidden>
+                  当前服务采用基础模式，画面参数由模型决定，每次生成 1 张。
+                </p>
               </div>
               <fieldset class="size-field">
                 <legend>画面比例</legend>
@@ -228,18 +233,6 @@
                     <option value="transparent">透明（需模型支持）</option>
                   </select>
                 </div>
-                <label class="checkbox-label"
-                  ><input
-                    type="checkbox"
-                    id="basic-mode"
-                    name="basicMode"
-                  /><span
-                    >基础兼容模式<small
-                      >仅发送提示词，适合 basic
-                      分组；忽略模型与画面参数，一次生成 1 张。</small
-                    ></span
-                  ></label
-                >
               </details>
               <div
                 id="generation-error"
@@ -255,7 +248,9 @@
                 <i class="ph ph-sparkle" aria-hidden="true"></i
                 ><span>开始生成</span><kbd>Ctrl ↵</kbd>
               </button>
-              <p class="form-footnote">每次生成自动保存，可随时回来继续。</p>
+              <p class="form-footnote" id="generation-quota-note">
+                无需登录即可创作，每日免费 3 张。
+              </p>
             </form>
             <section
               class="preview-panel panel"
@@ -350,6 +345,49 @@
             aria-label="历史记录分页"
           ></nav>
         </section>
+        <section id="admin-page" aria-labelledby="admin-title" hidden>
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">管理员工作台</p>
+              <h1 id="admin-title">用户管理<span class="accent">。</span></h1>
+              <p class="page-description">
+                手动调整账号等级，新的每日额度立即生效。
+              </p>
+            </div>
+          </div>
+          <div class="history-toolbar">
+            <div class="search-field">
+              <i class="ph ph-magnifying-glass" aria-hidden="true"></i
+              ><label for="admin-search" class="sr-only">搜索用户名</label
+              ><input
+                id="admin-search"
+                type="search"
+                maxlength="100"
+                placeholder="搜索用户名…"
+              />
+            </div>
+            <button
+              id="refresh-users"
+              class="button secondary icon-button"
+              aria-label="刷新用户列表"
+            >
+              <i class="ph ph-arrows-clockwise" aria-hidden="true"></i>
+            </button>
+          </div>
+          <div class="admin-tier-note">
+            <span>游客 <strong>3</strong> 张 / 日</span
+            ><span>注册用户 <strong>10</strong> 张 / 日</span
+            ><span>付费用户 <strong>100</strong> 张 / 日</span>
+          </div>
+          <p id="admin-summary" class="muted small" aria-live="polite"></p>
+          <div id="admin-error" class="inline-error" role="alert" hidden></div>
+          <div id="admin-users" class="admin-users"></div>
+          <nav
+            id="admin-pagination"
+            class="pagination"
+            aria-label="用户列表分页"
+          ></nav>
+        </section>
         <footer class="page-footer">
           <span
             >映象<span class="footer-separator">/</span>想象力，自有形状。</span
@@ -359,73 +397,121 @@
     </div>
 
     <dialog
-      id="settings-dialog"
-      class="settings-dialog"
-      aria-labelledby="settings-title"
+      id="account-dialog"
+      class="settings-dialog account-dialog"
+      aria-labelledby="account-title"
     >
       <div class="dialog-heading">
         <div>
           <span class="dialog-icon"
-            ><i class="ph ph-plugs-connected" aria-hidden="true"></i
+            ><i class="ph ph-user-circle" aria-hidden="true"></i
           ></span>
-          <h2 id="settings-title">连接 sub2api</h2>
-          <p>连接你的生图服务，开始创作。</p>
+          <h2 id="account-title">欢迎回到映象</h2>
+          <p id="account-description">
+            无需登录也能创作，注册后每天可生成 10 张。
+          </p>
         </div>
         <button
-          type="button"
           class="icon-button close-dialog"
-          data-close="settings-dialog"
-          aria-label="关闭设置"
+          data-close="account-dialog"
+          aria-label="关闭账号窗口"
         >
           <i class="ph ph-x" aria-hidden="true"></i>
         </button>
       </div>
-      <form id="settings-form">
-        <div class="field">
-          <label for="base-url">服务地址</label
-          ><input
-            type="url"
-            id="base-url"
-            placeholder="https://sub2api.example.com"
-            required
-            autocomplete="url"
-          />
-          <p class="field-help">填写服务根地址或以 /v1 结尾的地址。</p>
-        </div>
-        <div class="field">
-          <label for="api-key"
-            >API Key<span id="key-state" class="muted small"></span></label
-          ><input
-            type="password"
-            id="api-key"
-            placeholder="输入 sub2api 的 API Key"
-            autocomplete="new-password"
-            maxlength="2048"
-          />
-          <p class="field-help">密钥仅保存在服务端；留空保留已保存的密钥。</p>
-        </div>
-        <div class="field">
-          <label for="default-model">默认模型</label
-          ><input
-            id="default-model"
-            list="model-options"
-            value="gpt-image-2"
-            maxlength="120"
-            required
-          />
-        </div>
-        <div id="settings-error" class="inline-error" role="alert" hidden></div>
-        <div class="settings-tip">
-          <i class="ph ph-info" aria-hidden="true"></i
-          ><span
-            >模型与参数取决于你的 sub2api 分组权限。basic
-            分组请在创作时打开基础兼容模式。</span
+      <div id="auth-content">
+        <div class="auth-tabs" role="group" aria-label="登录或注册">
+          <button
+            id="login-tab"
+            class="active"
+            data-auth-mode="login"
+            type="button"
+            aria-pressed="true"
           >
+            登录</button
+          ><button
+            id="register-tab"
+            data-auth-mode="register"
+            type="button"
+            aria-pressed="false"
+          >
+            注册
+          </button>
         </div>
-        <button id="save-settings" class="button primary" type="submit">
-          <i class="ph ph-check" aria-hidden="true"></i>保存连接
+        <form id="auth-form">
+          <div class="field">
+            <label for="auth-username">用户名</label
+            ><input
+              id="auth-username"
+              name="username"
+              autocomplete="username"
+              minlength="3"
+              maxlength="32"
+              pattern="[a-zA-Z0-9_]{3,32}"
+              required
+              placeholder="3–32 位字母、数字或下划线"
+            />
+          </div>
+          <div class="field">
+            <label for="auth-password">密码</label
+            ><input
+              id="auth-password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              minlength="8"
+              maxlength="128"
+              required
+              placeholder="至少 8 位字符"
+            />
+          </div>
+          <div id="confirm-password-field" class="field" hidden>
+            <label for="auth-confirm-password">确认密码</label
+            ><input
+              id="auth-confirm-password"
+              type="password"
+              autocomplete="new-password"
+              minlength="8"
+              maxlength="128"
+              placeholder="再次输入密码"
+            />
+          </div>
+          <div id="auth-error" class="inline-error" role="alert" hidden></div>
+          <button id="auth-submit" class="button primary" type="submit">
+            登录账号
+          </button>
+        </form>
+        <p class="account-history-note">
+          账号和游客的作品分别保存。退出账号后，可以继续浏览当前浏览器的游客作品。
+        </p>
+      </div>
+      <div id="profile-content" hidden>
+        <div class="profile-summary">
+          <span id="profile-username"></span
+          ><span class="tier-badge" id="profile-tier"></span>
+        </div>
+        <div class="profile-quota">
+          <div>
+            <strong id="profile-remaining">0</strong><span>今日可用</span>
+          </div>
+          <div><strong id="profile-used">0</strong><span>已生成</span></div>
+          <div><strong id="profile-reserved">0</strong><span>生成中</span></div>
+        </div>
+        <p class="profile-reset">每天北京时间零点更新额度。</p>
+        <div class="tier-comparison">
+          <div><span>游客</span><strong>3 张 / 日</strong></div>
+          <div><span>注册用户</span><strong>10 张 / 日</strong></div>
+          <div><span>付费用户</span><strong>100 张 / 日</strong></div>
+        </div>
+        <p id="upgrade-description" class="account-history-note">
+          如需升级付费用户，请联系管理员开通，每天可生成 100 张图片。
+        </p>
+        <a id="profile-admin-link" href="#admin" class="button secondary" hidden
+          >进入用户管理<i class="ph ph-arrow-right" aria-hidden="true"></i></a
+        ><button id="logout-button" class="button secondary" type="button">
+          退出登录
         </button>
-      </form>
+      </div>
     </dialog>
 
     <dialog

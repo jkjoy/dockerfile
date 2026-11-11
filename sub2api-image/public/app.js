@@ -8,14 +8,16 @@ const presets = {
   nature: '午后的阳光穿过森林树冠，落在长满青苔的岩石与清澈溪流上，胶片摄影质感，自然色彩，宁静的氛围，细腻的光影层次。',
   product: '一瓶极简设计的香水置于浅灰色石台上，背景是一面柔和的白墙，斜射的窗光，清晰的玻璃折射，商业产品摄影，留白构图。',
 };
-const state = { config: null, recent: [], history: null, preview: null, previewIndex: 0, detail: null, detailIndex: 0, page: 1, view: 'studio', submitting: false, refreshing: false };
+const state = { config: null, me: null, recent: [], history: null, preview: null, previewIndex: 0, detail: null, detailIndex: 0, page: 1, view: 'studio', submitting: false, identityEpoch: 0, authMode: 'login', adminPage: 1 };
+const tierLabels = { guest: '游客', registered: '注册用户', paid: '付费用户' };
 let toastTimer;
 let searchTimer;
+let adminSearchTimer;
 let historyRequest = 0;
+let adminRequest = 0;
+let refreshPromise = null;
 let previewSignature = '';
 let detailSignature = '';
-let draft;
-try { draft = JSON.parse(localStorage.getItem('image-studio-draft') || 'null'); } catch { /* A corrupt draft should not prevent startup. */ }
 
 async function api(path, { method = 'GET', body } = {}) {
   const response = await fetch(path, {
@@ -28,7 +30,7 @@ async function api(path, { method = 'GET', body } = {}) {
   try { result = await response.json(); } catch { throw new Error('服务暂时不可用，请稍后重试。'); }
   if (!response.ok) {
     const message = typeof result.error === 'string' ? result.error : result.error?.message;
-    throw Object.assign(new Error(message || result.message || `请求未成功（${response.status}）`), { status: response.status });
+    throw Object.assign(new Error(message || result.message || `请求未成功（${response.status}）`), { status: response.status, quota: result.quota });
   }
   return result;
 }
@@ -56,45 +58,123 @@ function formatDate(value, full = false) {
 
 function formValues() {
   return {
-    prompt: $('#prompt').value.trim(), model: $('#model').value.trim(),
+    prompt: $('#prompt').value.trim(),
     size: $('input[name="size"]:checked')?.value || 'auto', quality: $('#quality').value,
-    n: $('#basic-mode').checked ? 1 : Number($('#n').value),
-    background: $('#background').value, basicMode: $('#basic-mode').checked,
+    n: state.config?.basicMode ? 1 : Number($('#n').value),
+    background: $('#background').value,
   };
 }
 
 function saveDraft() {
-  try { localStorage.setItem('image-studio-draft', JSON.stringify(formValues())); } catch { /* Private browsing can disable local storage. */ }
+  try { localStorage.setItem(`image-studio-draft:${state.me?.user?.id || 'guest'}`, JSON.stringify(formValues())); } catch { /* Private browsing can disable local storage. */ }
   $('#prompt-count').textContent = $('#prompt').value.length;
 }
 
 function fillForm(item) {
   $('#prompt').value = item.prompt || '';
-  $('#model').value = item.model || state.config?.model || 'gpt-image-2';
   const size = [...document.querySelectorAll('input[name="size"]')].find((input) => input.value === item.size);
   (size || $('input[name="size"][value="auto"]')).checked = true;
   for (const name of ['quality', 'background', 'n']) {
     const select = $(`#${name}`);
     if ([...select.options].some((option) => option.value === String(item[name]))) select.value = String(item[name]);
   }
-  $('#basic-mode').checked = Boolean(item.basicMode);
-  if (item.basicMode) $('.advanced').open = true;
   updateBasicMode();
   saveDraft();
 }
 
 function updateBasicMode() {
-  const basic = $('#basic-mode').checked;
-  for (const input of document.querySelectorAll('#model, #quality, #background, #n, input[name="size"], #load-models')) input.disabled = basic;
+  const basic = Boolean(state.config?.basicMode);
+  for (const input of document.querySelectorAll('#quality, #background, #n, input[name="size"]')) input.disabled = basic;
   if (basic) $('#n').value = '1';
+  $('#basic-mode-note').hidden = !basic;
 }
 
 function renderConfig() {
   const configured = Boolean(state.config?.configured);
   $('#setup-banner').hidden = configured;
-  $('#connection-label').textContent = configured ? 'sub2api 已配置' : '尚未配置';
-  $('#connection-dot').classList.toggle('connected', configured);
-  $('#sidebar-status').textContent = configured ? '已配置 · 可开始创作' : '等待配置连接';
+  $('#model-name').textContent = state.config?.model || '暂未配置';
+  updateBasicMode();
+  updateGenerateButton();
+}
+
+function restoreDraft() {
+  let saved;
+  try { saved = JSON.parse(localStorage.getItem(`image-studio-draft:${state.me?.user?.id || 'guest'}`) || 'null'); } catch { /* Ignore malformed local drafts. */ }
+  fillForm(saved && typeof saved === 'object' ? saved : { prompt: '', size: '1024x1024', quality: 'auto', background: 'auto', n: 1 });
+}
+
+function updateGenerateButton() {
+  const quota = state.me?.quota;
+  const count = state.config?.basicMode ? 1 : Number($('#n').value);
+  $('#generate-button').disabled = state.submitting || !state.config?.configured || !quota || count > quota.remaining;
+  $('#generate-button span').textContent = state.submitting ? '正在提交…' : !state.config?.configured ? '服务暂未就绪' : !quota ? '正在读取额度…' : !quota.remaining ? (quota.reserved ? '额度正在使用中' : '今日额度已用完') : count > quota.remaining ? '剩余额度不足，请减少数量' : '开始生成';
+  if (quota) $('#generation-quota-note').textContent = `今日可用 ${quota.remaining} 张 / 每日 ${quota.limit} 张 · 每次按图片张数计算`;
+}
+
+function renderQuota() {
+  if (!state.me) return;
+  const { user, quota } = state.me;
+  const tier = tierLabels[quota.tier] || '游客';
+  $('#quota-title').textContent = `今日还可生成 ${quota.remaining} 张图片`;
+  $('#quota-description').textContent = `${tier} · 每日 ${quota.limit} 张${quota.reserved ? ` · ${quota.reserved} 张生成中` : ''} · 北京时间零点更新`;
+  $('#quota-action').textContent = !user ? '注册领取每日 10 张' : quota.tier === 'paid' ? '查看我的额度' : '升级享每日 100 张';
+  $('#quota-action').dataset.action = user ? 'account' : 'register';
+  $('#sidebar-username').textContent = user?.username || '游客创作';
+  $('#sidebar-status').textContent = `${tier} · 今日剩余 ${quota.remaining} 张`;
+  $('#connection-label').textContent = user ? `${user.username} · ${tier}` : '登录 / 注册';
+  $('#connection-dot').classList.toggle('connected', Boolean(user));
+  $('#account-nav-label').textContent = user ? '我的账号' : '登录 / 注册';
+  $('#admin-nav').hidden = user?.role !== 'admin';
+  $('#profile-username').textContent = user?.username || '';
+  $('#profile-tier').textContent = user?.role === 'admin' ? '管理员' : tier;
+  $('#profile-remaining').textContent = quota.remaining;
+  $('#profile-used').textContent = quota.used;
+  $('#profile-reserved').textContent = quota.reserved;
+  $('#upgrade-description').textContent = quota.tier === 'paid' ? '你已享有每天 100 张图片的创作额度。' : '如需升级付费用户，请联系管理员开通，每天可生成 100 张图片。';
+  $('#profile-admin-link').hidden = user?.role !== 'admin';
+  if ($('#account-dialog').open) {
+    $('#auth-content').hidden = Boolean(user);
+    $('#profile-content').hidden = !user;
+  }
+  updateGenerateButton();
+}
+
+function applyMe(result) {
+  const changed = (state.me?.user?.id || null) !== (result.user?.id || null);
+  if (changed) saveDraft();
+  state.me = result;
+  if (changed) {
+    state.identityEpoch++;
+    historyRequest++;
+    adminRequest++;
+    state.recent = [];
+    state.history = null;
+    state.preview = null;
+    state.detail = null;
+    state.page = 1;
+    state.adminPage = 1;
+    $('#detail-dialog').close();
+    $('#history-grid').replaceChildren();
+    $('#history-summary').textContent = '';
+    $('#pagination').replaceChildren();
+    $('#admin-users').replaceChildren();
+    $('#admin-pagination').replaceChildren();
+    $('#search').value = '';
+    $('#status-filter').value = 'all';
+    renderStats({ total: 0, images: 0, processing: 0 });
+    renderRecent();
+    renderPreview(true);
+    restoreDraft();
+    showError('#generation-error', '');
+    if (state.view === 'admin' && result.user?.role !== 'admin') { location.hash = 'studio'; setView(); }
+  }
+  renderQuota();
+}
+
+async function loadMe() {
+  const epoch = state.identityEpoch;
+  const result = await api('/api/me');
+  if (epoch === state.identityEpoch) applyMe(result);
 }
 
 function renderStats(stats) {
@@ -138,7 +218,7 @@ function processingContent(item) {
 }
 
 function failureContent(item) {
-  return `<div class="canvas-empty error"><span class="error-illustration">${icon('cloud-warning')}</span><h3>这次画面没能完成</h3><p>${escapeHtml(item.error || '请检查连接设置，调整参数后再试。')}</p><button class="button secondary" data-reuse="${escapeHtml(item.id)}">${icon('arrow-counter-clockwise')}复用提示词</button></div>`;
+  return `<div class="canvas-empty error"><span class="error-illustration">${icon('cloud-warning')}</span><h3>这次画面没能完成</h3><p>${escapeHtml(item.error || '请调整参数后再试，或联系管理员。')}</p><button class="button secondary" data-reuse="${escapeHtml(item.id)}">${icon('arrow-counter-clockwise')}复用提示词</button></div>`;
 }
 
 function renderPreview(force = false) {
@@ -174,7 +254,9 @@ function renderHistory() {
 }
 
 async function loadRecent() {
+  const epoch = state.identityEpoch;
   const result = await api('/api/generations?limit=4');
+  if (epoch !== state.identityEpoch) return;
   state.recent = result.items;
   renderStats(result.stats);
   renderRecent();
@@ -186,10 +268,11 @@ async function loadRecent() {
 }
 
 async function loadHistory() {
+  const epoch = state.identityEpoch;
   const request = ++historyRequest;
   const params = new URLSearchParams({ q: $('#search').value.trim(), status: $('#status-filter').value, page: state.page, limit: '24' });
   const result = await api(`/api/generations?${params}`);
-  if (request !== historyRequest) return;
+  if (request !== historyRequest || epoch !== state.identityEpoch) return;
   if (result.pages > 0 && state.page > result.pages) {
     state.page = result.pages;
     return loadHistory();
@@ -200,10 +283,12 @@ async function loadHistory() {
 }
 
 async function refreshSelected() {
+  const epoch = state.identityEpoch;
   const ids = new Set([state.preview?.id, $('#detail-dialog').open ? state.detail?.id : null].filter(Boolean));
   await Promise.all([...ids].map(async (id) => {
     try {
       const { generation } = await api(`/api/generations/${encodeURIComponent(id)}`);
+      if (epoch !== state.identityEpoch) return;
       const previous = state.preview;
       if (state.preview?.id === id) {
         state.preview = generation;
@@ -215,6 +300,7 @@ async function refreshSelected() {
         renderDetail();
       }
     } catch (error) {
+      if (epoch !== state.identityEpoch) return;
       // Lists remain browsable even if another browser deleted this selection.
       if (error.status !== 404) throw error;
       if (state.preview?.id === id) { state.preview = null; renderPreview(); }
@@ -224,37 +310,75 @@ async function refreshSelected() {
 }
 
 async function refreshAll({ quiet = false } = {}) {
-  if (state.refreshing) return;
-  state.refreshing = true;
-  try {
-    await Promise.all([loadRecent(), refreshSelected(), ...(state.view === 'history' ? [loadHistory()] : [])]);
-  } catch (error) {
-    if (!quiet) toast(error.message, true);
-  } finally { state.refreshing = false; }
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = (async () => {
+    try {
+      await loadMe();
+      await Promise.all([loadRecent(), refreshSelected(), ...(state.view === 'history' ? [loadHistory()] : [])]);
+    } catch (error) { if (!quiet) toast(error.message, true); }
+  })();
+  try { await refreshPromise; } finally { refreshPromise = null; }
 }
 
 function setView() {
-  state.view = location.hash === '#history' ? 'history' : 'studio';
+  state.view = location.hash === '#history' ? 'history' : location.hash === '#admin' && state.me?.user?.role === 'admin' ? 'admin' : 'studio';
   $('#studio-page').hidden = state.view !== 'studio';
   $('#history-page').hidden = state.view !== 'history';
-  $('#breadcrumb-page').textContent = state.view === 'studio' ? '创作工作台' : '历史记录';
+  $('#admin-page').hidden = state.view !== 'admin';
+  $('#breadcrumb-page').textContent = { studio: '创作工作台', history: '历史记录', admin: '用户管理' }[state.view];
   document.querySelectorAll('[data-page]').forEach((link) => {
     link.classList.toggle('active', link.dataset.page === state.view);
     if (link.dataset.page === state.view) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
   });
   if (state.view === 'history') loadHistory().catch((error) => toast(error.message, true));
+  if (state.view === 'admin') loadUsers().catch((error) => showError('#admin-error', error.message));
 }
 
-function openSettings() {
-  if (state.config) {
-    $('#base-url').value = state.config.baseUrl || '';
-    $('#default-model').value = state.config.model || 'gpt-image-2';
-    $('#key-state').textContent = state.config.hasApiKey ? '已保存' : '尚未填写';
-    $('#api-key').placeholder = state.config.hasApiKey ? '已保存，留空则保留原密钥' : '输入 sub2api 的 API Key';
+function setAuthMode(mode) {
+  state.authMode = mode;
+  const register = mode === 'register';
+  $('#account-title').textContent = register ? '给灵感一个专属空间' : '欢迎回到映象';
+  $('#auth-submit').textContent = register ? '注册并开始创作' : '登录账号';
+  $('#auth-password').autocomplete = register ? 'new-password' : 'current-password';
+  $('#confirm-password-field').hidden = !register;
+  $('#auth-confirm-password').required = register;
+  document.querySelectorAll('[data-auth-mode]').forEach((button) => {
+    const active = button.dataset.authMode === mode;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+  showError('#auth-error', '');
+}
+
+function openAccount(mode = 'login') {
+  const loggedIn = Boolean(state.me?.user);
+  $('#auth-content').hidden = loggedIn;
+  $('#profile-content').hidden = !loggedIn;
+  $('#auth-password').value = '';
+  $('#auth-confirm-password').value = '';
+  if (loggedIn) {
+    $('#account-title').textContent = '我的创作账号';
+    $('#account-description').textContent = '每一天，都有新的灵感额度。';
+  } else {
+    setAuthMode(mode);
+    $('#account-description').textContent = '无需登录也能创作，注册后每天可生成 10 张。';
   }
-  $('#api-key').value = '';
-  showError('#settings-error', '');
-  $('#settings-dialog').showModal();
+  renderQuota();
+  if (!$('#account-dialog').open) $('#account-dialog').showModal();
+}
+
+async function loadUsers() {
+  if (state.me?.user?.role !== 'admin') return;
+  const epoch = state.identityEpoch;
+  const request = ++adminRequest;
+  const params = new URLSearchParams({ q: $('#admin-search').value.trim(), page: state.adminPage, limit: '20' });
+  const result = await api(`/api/admin/users?${params}`);
+  if (epoch !== state.identityEpoch || request !== adminRequest) return;
+  if (result.pages > 0 && state.adminPage > result.pages) { state.adminPage = result.pages; return loadUsers(); }
+  showError('#admin-error', '');
+  $('#admin-summary').textContent = `共 ${result.total} 个账号`;
+  $('#admin-users').innerHTML = result.items.length ? result.items.map((user) => `<article class="admin-user"><div class="admin-user-identity">${icon('user-circle')}<div><strong>${escapeHtml(user.username)}</strong><small>${user.role === 'admin' ? '管理员' : tierLabels[user.tier]} · 注册于 ${formatDate(user.createdAt, true)}</small></div></div><div class="admin-user-usage"><strong>${user.quota.remaining}<small> / ${user.quota.limit}</small></strong><span>今日可用 · 已生成 ${user.quota.used} 张${user.quota.reserved ? ` · 生成中 ${user.quota.reserved} 张` : ''}</span></div>${user.role === 'admin' ? '<span class="tier-badge">管理员</span>' : `<button class="button ${user.tier === 'paid' ? 'secondary' : 'primary'}" data-user-id="${escapeHtml(user.id)}" data-set-tier="${user.tier === 'paid' ? 'registered' : 'paid'}">${user.tier === 'paid' ? '降为注册用户' : '设为付费用户'}</button>`}</article>`).join('') : emptyState('没有找到这个账号', '试着使用不同的用户名搜索。');
+  $('#admin-pagination').innerHTML = result.pages > 1 ? `<button class="button secondary" data-admin-page="${result.page - 1}" ${result.page <= 1 ? 'disabled' : ''}>${icon('caret-left')}上一页</button><span>${result.page} / ${result.pages}</span><button class="button secondary" data-admin-page="${result.page + 1}" ${result.page >= result.pages ? 'disabled' : ''}>下一页${icon('caret-right')}</button>` : '';
 }
 
 function renderDetail(force = false) {
@@ -275,7 +399,9 @@ function renderDetail(force = false) {
 }
 
 async function openDetail(id) {
+  const epoch = state.identityEpoch;
   const { generation } = await api(`/api/generations/${encodeURIComponent(id)}`);
+  if (epoch !== state.identityEpoch) return;
   state.detail = generation;
   state.detailIndex = state.preview?.id === id ? state.previewIndex : 0;
   renderDetail(true);
@@ -283,7 +409,9 @@ async function openDetail(id) {
 }
 
 async function reuseGeneration(id) {
+  const epoch = state.identityEpoch;
   const item = state.detail?.id === id ? state.detail : state.preview?.id === id ? state.preview : (await api(`/api/generations/${encodeURIComponent(id)}`)).generation;
+  if (epoch !== state.identityEpoch) return;
   fillForm(item);
   $('#detail-dialog').close();
   location.hash = 'studio';
@@ -296,64 +424,75 @@ async function reuseGeneration(id) {
 $('#generation-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   if (state.submitting) return;
-  if (!state.config?.configured) { openSettings(); return; }
+  if (!state.config?.configured) { showError('#generation-error', '生图服务暂未就绪，请联系管理员。'); return; }
   const values = formValues();
+  const epoch = state.identityEpoch;
   if (!values.prompt) { showError('#generation-error', '先描述一下你想要的画面。'); $('#prompt').focus(); return; }
   showError('#generation-error', '');
   state.submitting = true;
   $('#generate-button').disabled = true;
   $('#generate-button span').textContent = '正在提交…';
   try {
-    const { generation } = await api('/api/generations', { method: 'POST', body: values });
+    const { generation, quota } = await api('/api/generations', { method: 'POST', body: values });
+    if (epoch !== state.identityEpoch) return;
+    if (quota && state.me) { state.me.quota = quota; renderQuota(); }
     state.preview = generation;
     state.previewIndex = 0;
     renderPreview();
     saveDraft();
     toast('创作已加入队列，完成后自动保存');
     await refreshAll({ quiet: true });
-  } catch (error) { showError('#generation-error', error.message); }
+  } catch (error) {
+    if (epoch !== state.identityEpoch) return;
+    showError('#generation-error', error.message);
+    if (error.quota && state.me) { state.me.quota = error.quota; renderQuota(); }
+  }
   finally {
     state.submitting = false;
-    $('#generate-button').disabled = false;
-    $('#generate-button span').textContent = '开始生成';
+    updateGenerateButton();
   }
 });
 
-$('#settings-form').addEventListener('submit', async (event) => {
+$('#auth-form').addEventListener('submit', async (event) => {
   event.preventDefault();
-  showError('#settings-error', '');
-  $('#save-settings').disabled = true;
+  showError('#auth-error', '');
+  if (state.authMode === 'register' && $('#auth-password').value !== $('#auth-confirm-password').value) {
+    showError('#auth-error', '两次输入的密码不一致。');
+    return;
+  }
+  $('#auth-submit').disabled = true;
   try {
-    state.config = await api('/api/config', { method: 'PUT', body: { baseUrl: $('#base-url').value.trim(), apiKey: $('#api-key').value.trim(), model: $('#default-model').value.trim() } });
-    $('#api-key').value = '';
-    $('#model').value = state.config.model;
-    renderConfig();
-    saveDraft();
-    $('#settings-dialog').close();
-    toast('连接配置已保存');
-  } catch (error) { showError('#settings-error', error.message); }
-  finally { $('#save-settings').disabled = false; }
+    const result = await api(`/api/auth/${state.authMode}`, { method: 'POST', body: { username: $('#auth-username').value.trim(), password: $('#auth-password').value } });
+    applyMe(result);
+    $('#auth-password').value = '';
+    $('#auth-confirm-password').value = '';
+    $('#account-dialog').close();
+    await refreshAll();
+    toast(state.authMode === 'register' ? '注册成功，每天可以创作 10 张图片' : '登录成功，欢迎回来');
+  } catch (error) { showError('#auth-error', error.message); }
+  finally { $('#auth-submit').disabled = false; }
 });
 
-$('#load-models').addEventListener('click', async () => {
-  if (!state.config?.configured) { openSettings(); return; }
-  $('#load-models').disabled = true;
+$('#logout-button').addEventListener('click', async () => {
+  $('#logout-button').disabled = true;
   try {
-    const { models } = await api('/api/models');
-    if (models.length) {
-      $('#model-options').innerHTML = models.map((model) => `<option value="${escapeHtml(model.id)}"></option>`).join('');
-      toast(`已获取 ${models.length} 个图片模型，点击模型输入框选择`);
-    } else toast('未发现图片模型，可以直接输入你的分组支持的模型名称');
+    applyMe(await api('/api/auth/logout', { method: 'POST', body: {} }));
+    $('#account-dialog').close();
+    await refreshAll();
+    toast('已退出，继续以游客身份创作');
   } catch (error) { toast(error.message, true); }
-  finally { $('#load-models').disabled = $('#basic-mode').checked; }
+  finally { $('#logout-button').disabled = false; }
 });
 
 document.addEventListener('click', async (event) => {
   const button = event.target.closest('button, a');
   if (!button || button.disabled) return;
   try {
-    if (button.dataset.action === 'settings') openSettings();
+    if (button.dataset.action === 'account') openAccount();
+    if (button.dataset.action === 'register') openAccount('register');
+    if (button.dataset.authMode) setAuthMode(button.dataset.authMode);
     if (button.dataset.close) $(`#${button.dataset.close}`).close();
+    if (button.id === 'profile-admin-link') $('#account-dialog').close();
     if (button.dataset.preset) { $('#prompt').value = presets[button.dataset.preset]; saveDraft(); $('#prompt').focus(); }
     if (button.dataset.generation) await openDetail(button.dataset.generation);
     if (button.dataset.reuse) await reuseGeneration(button.dataset.reuse);
@@ -363,6 +502,15 @@ document.addEventListener('click', async (event) => {
       state.page = Number(button.dataset.historyPage);
       await loadHistory();
       $('#history-summary').scrollIntoView({ block: 'start' });
+    }
+    if (button.dataset.adminPage) { state.adminPage = Number(button.dataset.adminPage); await loadUsers(); }
+    if (button.dataset.setTier) {
+      button.disabled = true;
+      try {
+        await api(`/api/admin/users/${encodeURIComponent(button.dataset.userId)}`, { method: 'PATCH', body: { tier: button.dataset.setTier } });
+        await loadUsers();
+        toast(button.dataset.setTier === 'paid' ? '已升级为付费用户，每天可生成 100 张' : '已调整为注册用户，每天可生成 10 张');
+      } catch (error) { button.disabled = false; throw error; }
     }
     if (button.dataset.action === 'copy-prompt' && state.detail) {
       if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(state.detail.prompt);
@@ -392,8 +540,7 @@ document.addEventListener('click', async (event) => {
 });
 
 $('#clear-prompt').addEventListener('click', () => { $('#prompt').value = ''; saveDraft(); $('#prompt').focus(); });
-$('#generation-form').addEventListener('input', saveDraft);
-$('#basic-mode').addEventListener('change', () => { updateBasicMode(); saveDraft(); });
+$('#generation-form').addEventListener('input', () => { saveDraft(); updateGenerateButton(); });
 $('#search').addEventListener('input', () => {
   clearTimeout(searchTimer);
   // Invalidate an older search response while waiting for the next keystroke.
@@ -402,6 +549,12 @@ $('#search').addEventListener('input', () => {
 });
 $('#status-filter').addEventListener('change', () => { state.page = 1; loadHistory().catch((error) => toast(error.message, true)); });
 $('#refresh-history').addEventListener('click', () => refreshAll());
+$('#admin-search').addEventListener('input', () => {
+  clearTimeout(adminSearchTimer);
+  adminRequest++;
+  adminSearchTimer = setTimeout(() => { state.adminPage = 1; loadUsers().catch((error) => showError('#admin-error', error.message)); }, 300);
+});
+$('#refresh-users').addEventListener('click', () => loadUsers().catch((error) => showError('#admin-error', error.message)));
 window.addEventListener('hashchange', setView);
 document.addEventListener('keydown', (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && state.view === 'studio' && !$('dialog[open]')) {
@@ -422,16 +575,17 @@ for (const dialog of document.querySelectorAll('dialog')) {
     if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) dialog.close();
   });
 }
+$('#account-dialog').addEventListener('close', () => { $('#auth-password').value = ''; $('#auth-confirm-password').value = ''; });
 
 async function init() {
   renderPreview();
-  if (draft && typeof draft === 'object') fillForm(draft);
-  setView();
   try {
     state.config = await api('/api/config');
-    if (!draft) $('#model').value = state.config.model || 'gpt-image-2';
     renderConfig();
+    await loadMe();
+    restoreDraft();
   } catch (error) { $('#sidebar-status').textContent = '服务连接失败'; toast(error.message, true); }
+  setView();
   await refreshAll();
 }
 await init();

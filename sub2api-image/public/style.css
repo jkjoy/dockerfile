@@ -1976,3 +1976,364 @@ body:has(dialog[open]) {
     transform: none;
   }
 }
+
+.quota-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 17px 19px;
+  margin-bottom: 29px;
+  background: #edf3eb;
+  border: 1px solid #dfe9db;
+  border-radius: 12px;
+}
+.quota-emblem {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  color: var(--accent);
+  background: #e0ebdb;
+}
+.quota-banner strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: #42623a;
+}
+.quota-banner p {
+  font-size: 11px;
+  color: #829176;
+  margin-top: 7px;
+  line-height: 1.7;
+}
+.quota-banner > .button {
+  margin-left: auto;
+  font-size: 11px;
+  background: #ffffffb8;
+  border-color: #d5e2cf;
+  color: var(--accent);
+}
+.field-label {
+  display: block;
+  font-size: 11px;
+  margin-bottom: 9px;
+}
+.model-value {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 11px 12px;
+  color: #607256;
+  font-size: 12px;
+  background: #fafbf8;
+}
+.model-value .ph {
+  font-size: 17px;
+  color: #95a18c;
+}
+.model-value span {
+  overflow-wrap: anywhere;
+}
+.model-value small {
+  margin-left: auto;
+  font-size: 9px;
+  color: #9ca790;
+  white-space: nowrap;
+}
+.status-button {
+  max-width: 260px;
+  min-width: 0;
+}
+#connection-label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.connection-card strong {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 108px;
+}
+.auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 4px;
+  background: #f2f5ef;
+  border-radius: 9px;
+  gap: 4px;
+  margin-bottom: 24px;
+}
+.auth-tabs button {
+  min-height: 36px;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #8c9a7f;
+}
+.auth-tabs button.active {
+  background: white;
+  color: var(--accent);
+  box-shadow: 0 1px 5px #24361b0d;
+}
+.account-history-note {
+  color: #919e85;
+  font-size: 11px;
+  line-height: 1.9;
+  margin-top: 18px;
+}
+.profile-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 22px;
+}
+#profile-username {
+  font-size: 19px;
+  font-weight: 600;
+  color: #526749;
+  overflow-wrap: anywhere;
+}
+.tier-badge {
+  font-size: 10px;
+  color: var(--accent);
+  background: #edf3e9;
+  border: 1px solid #dfe9d7;
+  padding: 6px 9px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.profile-quota {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  text-align: center;
+  padding: 21px 0;
+  border: 1px solid #e4eadd;
+  border-radius: 10px;
+  background: #fafbf8;
+}
+.profile-quota > div + div {
+  border-left: 1px solid #e4eadd;
+}
+.profile-quota strong {
+  font-size: 26px;
+  font-weight: 500;
+  color: #45623a;
+  display: block;
+}
+.profile-quota span {
+  display: block;
+  font-size: 10px;
+  color: #95a28a;
+  margin-top: 8px;
+}
+.profile-reset {
+  font-size: 10px;
+  color: #9ba88e;
+  margin: 11px 0 25px;
+  text-align: center;
+}
+.tier-comparison {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.tier-comparison > div {
+  border-bottom: 1px solid #e5ebdf;
+  padding-bottom: 13px;
+}
+.tier-comparison span {
+  display: block;
+  font-size: 10px;
+  color: #96a389;
+  margin-bottom: 7px;
+}
+.tier-comparison strong {
+  font-size: 12px;
+  font-weight: 500;
+  color: #5f7453;
+}
+#logout-button,
+#profile-admin-link {
+  width: 100%;
+  margin-top: 17px;
+}
+#logout-button {
+  color: #8c987e;
+}
+.admin-tier-note {
+  display: flex;
+  gap: 25px;
+  padding: 13px 0 22px;
+  color: #929f86;
+  font-size: 12px;
+}
+.admin-tier-note strong {
+  font-weight: 600;
+  color: #557549;
+}
+#admin-summary {
+  margin-bottom: 17px;
+}
+.admin-users {
+  display: grid;
+  gap: 12px;
+}
+.admin-user {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(150px, 0.7fr) 132px;
+  align-items: center;
+  gap: 22px;
+  padding: 21px;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.admin-user-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.admin-user-identity > .ph {
+  color: #95a78a;
+  font-size: 31px;
+}
+.admin-user-identity > div {
+  min-width: 0;
+}
+.admin-user-identity strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #5b7050;
+  overflow-wrap: anywhere;
+}
+.admin-user-identity small {
+  display: block;
+  margin-top: 8px;
+  font-size: 10px;
+  line-height: 1.7;
+  color: #a0ab94;
+}
+.admin-user-usage > strong {
+  display: block;
+  font-size: 21px;
+  font-weight: 500;
+  color: #57764a;
+}
+.admin-user-usage strong small {
+  font-size: 12px;
+  font-weight: 400;
+  color: #a2ad95;
+}
+.admin-user-usage > span {
+  display: block;
+  font-size: 10px;
+  color: #9daa8e;
+  margin-top: 7px;
+  line-height: 1.7;
+}
+.admin-user > .button {
+  font-size: 11px;
+  min-height: 38px;
+}
+.admin-user > .tier-badge {
+  justify-self: center;
+}
+@media (max-width: 900px) {
+  .quota-banner {
+    gap: 11px;
+    padding: 14px;
+  }
+  .quota-banner strong {
+    font-size: 12px;
+  }
+  .quota-banner p {
+    font-size: 10px;
+  }
+  .quota-banner > .button {
+    font-size: 10px;
+    padding: 9px 10px;
+  }
+  .admin-user {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 17px;
+  }
+  .admin-user-identity {
+    grid-column: 1 / -1;
+  }
+  .admin-user > .tier-badge {
+    justify-self: end;
+  }
+}
+@media (max-width: 500px) {
+  .quota-banner {
+    display: grid;
+    grid-template-columns: 29px 1fr;
+    padding: 13px;
+    gap: 9px 10px;
+    margin-bottom: 24px;
+  }
+  .quota-emblem {
+    width: 29px;
+    height: 29px;
+    border-radius: 8px;
+  }
+  .quota-emblem .ph {
+    font-size: 17px;
+  }
+  .quota-banner strong {
+    font-size: 12px;
+  }
+  .quota-banner p {
+    font-size: 9px;
+    margin-top: 5px;
+  }
+  .quota-banner > .button {
+    grid-column: 2;
+    margin: 2px 0 0;
+    justify-self: start;
+    min-height: 30px;
+    padding: 6px 9px;
+    font-size: 10px;
+  }
+  .status-button {
+    max-width: 190px;
+  }
+  .breadcrumb {
+    flex-shrink: 0;
+  }
+  .topbar {
+    gap: 12px;
+  }
+  .sidebar {
+    gap: 8px;
+  }
+  .sidebar nav {
+    gap: 2px;
+  }
+  .nav-link {
+    padding-left: 7px;
+    padding-right: 7px;
+  }
+  .admin-tier-note {
+    gap: 15px;
+    font-size: 10px;
+  }
+  .admin-user {
+    padding: 16px;
+  }
+  .account-dialog {
+    padding: 24px;
+  }
+  .account-dialog .field label {
+    font-size: 12px;
+  }
+}
