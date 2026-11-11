@@ -1,0 +1,17 @@
+services:
+  sub2api-image:
+    image: jkjoy/sub2api-image:latest
+    init: true
+    restart: unless-stopped
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-3080}:3000"
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+      DATA_DIR: /app/data
+    volumes:
+      - image-data:/app/data
+
+volumes:
+  image-data:

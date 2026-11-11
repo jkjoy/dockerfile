@@ -1,0 +1,17 @@
+{
+  "name": "sub2api-image",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A local image studio and persistent image history for sub2api",
+  "engines": { "node": ">=24.0.0" },
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@phosphor-icons/web": "^2.1.2",
+    "express": "^5.1.0"
+  }
+}

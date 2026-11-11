@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f6f7f5" />
+    <meta
+      name="description"
+      content="通过 sub2api 生成图片，收藏每一次灵感。"
+    />
+    <title>映象 · sub2api 图片工作台</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/vendor/phosphor/regular/style.css" />
+    <link rel="stylesheet" href="/style.css" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳到主要内容</a>
+    <aside class="sidebar">
+      <a href="#studio" class="brand" aria-label="映象首页">
+        <span class="brand-mark"
+          ><i class="ph ph-aperture" aria-hidden="true"></i
+        ></span>
+        <span>映象<span class="brand-sub">IMAGE STUDIO</span></span>
+      </a>
+      <div class="nav-caption">你的创作空间</div>
+      <nav aria-label="主导航">
+        <a href="#studio" class="nav-link active" data-page="studio"
+          ><i class="ph ph-sparkle" aria-hidden="true"></i>创作工作台</a
+        >
+        <a href="#history" class="nav-link" data-page="history"
+          ><i class="ph ph-images" aria-hidden="true"></i>历史记录<span
+            id="nav-count"
+            class="nav-count"
+            >0</span
+          ></a
+        >
+      </nav>
+      <div class="sidebar-note">
+        <i class="ph ph-lightbulb" aria-hidden="true"></i>
+        <p>好画面，始于一个想法。<br />试着描述光线、材质与氛围。</p>
+      </div>
+      <div class="sidebar-bottom">
+        <button class="connection-card" data-action="settings">
+          <span class="connection-icon"
+            ><i class="ph ph-plugs-connected" aria-hidden="true"></i></span
+          ><span
+            ><strong>sub2api</strong
+            ><small id="sidebar-status">正在读取配置</small></span
+          ><i class="ph ph-caret-right" aria-hidden="true"></i>
+        </button>
+        <button class="nav-link settings-nav" data-action="settings">
+          <i class="ph ph-sliders-horizontal" aria-hidden="true"></i>连接设置
+        </button>
+        <div class="local-note">
+          <i class="ph ph-hard-drives" aria-hidden="true"></i
+          >图片与历史保存于服务器本地
+        </div>
+      </div>
+    </aside>
+
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="breadcrumb">
+          工作空间<i class="ph ph-caret-right" aria-hidden="true"></i
+          ><span id="breadcrumb-page">创作工作台</span>
+        </div>
+        <button class="status-button" data-action="settings">
+          <span id="connection-dot" class="status-dot"></span
+          ><span id="connection-label">连接设置</span
+          ><i class="ph ph-gear-six" aria-hidden="true"></i>
+        </button>
+      </header>
+      <main id="main">
+        <section id="studio-page" aria-labelledby="studio-title">
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">让灵感有迹可循</p>
+              <h1 id="studio-title">
+                把想象，变成画面<span class="accent">。</span>
+              </h1>
+              <p class="page-description">写下脑海中的场景，剩下的交给 AI。</p>
+            </div>
+            <span class="heading-icon" aria-hidden="true"
+              ><i class="ph ph-magic-wand"></i
+            ></span>
+          </div>
+          <button
+            id="setup-banner"
+            class="setup-banner"
+            data-action="settings"
+            hidden
+          >
+            <i class="ph ph-plugs" aria-hidden="true"></i
+            ><span
+              ><strong>先连接你的 sub2api</strong
+              ><span>填写服务地址和 API Key，开始第一张创作。</span></span
+            ><span class="banner-cta"
+              >去设置<i class="ph ph-arrow-up-right" aria-hidden="true"></i
+            ></span>
+          </button>
+          <div class="workspace">
+            <form id="generation-form" class="composer panel">
+              <div class="panel-heading">
+                <h2>
+                  <i class="ph ph-pencil-line" aria-hidden="true"></i>创作描述
+                </h2>
+                <button class="text-button" id="clear-prompt" type="button">
+                  清空
+                </button>
+              </div>
+              <label for="prompt" class="sr-only">图片提示词</label>
+              <div class="prompt-box">
+                <textarea
+                  id="prompt"
+                  name="prompt"
+                  maxlength="16000"
+                  required
+                  placeholder="描述你想看见的画面…&#10;&#10;例如：一座漂浮在云端的温室，透明玻璃折射清晨的光，植物自由生长，电影感构图。"
+                ></textarea>
+                <div class="prompt-bottom">
+                  <span>场景 · 风格 · 光线 · 细节</span
+                  ><span><span id="prompt-count">0</span> / 16000</span>
+                </div>
+              </div>
+              <div class="inspiration">
+                <span>试试灵感</span
+                ><button type="button" data-preset="miniature">
+                  微缩世界<i class="ph ph-plus" aria-hidden="true"></i></button
+                ><button type="button" data-preset="nature">
+                  自然光影<i class="ph ph-plus" aria-hidden="true"></i></button
+                ><button type="button" data-preset="product">
+                  产品摄影<i class="ph ph-plus" aria-hidden="true"></i>
+                </button>
+              </div>
+              <div class="form-divider"></div>
+              <div class="field">
+                <label for="model"
+                  >生成模型<button
+                    type="button"
+                    id="load-models"
+                    class="text-button"
+                    title="从 sub2api 获取可用图片模型"
+                  >
+                    <i class="ph ph-arrows-clockwise" aria-hidden="true"></i
+                    >获取模型
+                  </button></label
+                ><input
+                  id="model"
+                  name="model"
+                  list="model-options"
+                  value="gpt-image-2"
+                  maxlength="120"
+                  placeholder="输入模型名称"
+                  required
+                /><datalist id="model-options">
+                  <option value="gpt-image-2"></option>
+                  <option value="gpt-image-1.5"></option>
+                  <option value="gpt-image-1"></option>
+                  <option value="dall-e-3"></option>
+                </datalist>
+              </div>
+              <fieldset class="size-field">
+                <legend>画面比例</legend>
+                <div class="size-options">
+                  <label class="size-option"
+                    ><input
+                      type="radio"
+                      name="size"
+                      value="1024x1024"
+                      checked
+                    /><span
+                      ><i class="ph ph-square" aria-hidden="true"></i
+                      ><strong>1:1</strong><small>方形</small></span
+                    ></label
+                  ><label class="size-option"
+                    ><input type="radio" name="size" value="1536x1024" /><span
+                      ><i class="ph ph-rectangle" aria-hidden="true"></i
+                      ><strong>3:2</strong><small>横向</small></span
+                    ></label
+                  ><label class="size-option"
+                    ><input type="radio" name="size" value="1024x1536" /><span
+                      ><i
+                        class="ph ph-rectangle portrait-icon"
+                        aria-hidden="true"
+                      ></i
+                      ><strong>2:3</strong><small>纵向</small></span
+                    ></label
+                  ><label class="size-option"
+                    ><input type="radio" name="size" value="auto" /><span
+                      ><i class="ph ph-corners-out" aria-hidden="true"></i
+                      ><strong>自动</strong><small>模型决定</small></span
+                    ></label
+                  >
+                </div>
+              </fieldset>
+              <div class="field-row">
+                <div class="field">
+                  <label for="quality">画面质量</label
+                  ><select id="quality" name="quality">
+                    <option value="auto">自动</option>
+                    <option value="low">低 · Low</option>
+                    <option value="medium">中 · Medium</option>
+                    <option value="high">高 · High</option>
+                    <option value="standard">标准 · DALL·E</option>
+                    <option value="hd">高清 · DALL·E</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="n">生成数量</label
+                  ><select id="n" name="n">
+                    <option value="1">1 张</option>
+                    <option value="2">2 张</option>
+                    <option value="3">3 张</option>
+                    <option value="4">4 张</option>
+                  </select>
+                </div>
+              </div>
+              <details class="advanced">
+                <summary>
+                  更多设置<i class="ph ph-caret-down" aria-hidden="true"></i>
+                </summary>
+                <div class="field">
+                  <label for="background">背景</label
+                  ><select id="background" name="background">
+                    <option value="auto">自动</option>
+                    <option value="opaque">不透明</option>
+                    <option value="transparent">透明（需模型支持）</option>
+                  </select>
+                </div>
+                <label class="checkbox-label"
+                  ><input
+                    type="checkbox"
+                    id="basic-mode"
+                    name="basicMode"
+                  /><span
+                    >基础兼容模式<small
+                      >仅发送提示词，适合 basic
+                      分组；忽略模型与画面参数，一次生成 1 张。</small
+                    ></span
+                  ></label
+                >
+              </details>
+              <div
+                id="generation-error"
+                class="inline-error"
+                role="alert"
+                hidden
+              ></div>
+              <button
+                id="generate-button"
+                type="submit"
+                class="button primary generate-button"
+              >
+                <i class="ph ph-sparkle" aria-hidden="true"></i
+                ><span>开始生成</span><kbd>Ctrl ↵</kbd>
+              </button>
+              <p class="form-footnote">每次生成自动保存，可随时回来继续。</p>
+            </form>
+            <section
+              class="preview-panel panel"
+              aria-labelledby="preview-heading"
+            >
+              <div class="panel-heading">
+                <h2 id="preview-heading">
+                  <i class="ph ph-frame-corners" aria-hidden="true"></i>画面预览
+                </h2>
+                <span id="preview-status" class="muted small"
+                  >等待你的灵感</span
+                >
+              </div>
+              <div id="preview-content" class="preview-content"></div>
+              <div id="preview-footer" class="preview-footer">
+                <i class="ph ph-shield-check" aria-hidden="true"></i
+                ><span>生成的原图将自动保存到本地</span>
+              </div>
+            </section>
+          </div>
+          <section class="recent-section" aria-labelledby="recent-title">
+            <div class="section-heading">
+              <div>
+                <h2 id="recent-title">最近的创作</h2>
+                <span id="recent-subtitle" class="muted small"
+                  >每一张画面，都是灵感的切片</span
+                >
+              </div>
+              <a href="#history" class="text-link"
+                >查看全部<i class="ph ph-arrow-right" aria-hidden="true"></i
+              ></a>
+            </div>
+            <div
+              id="recent-grid"
+              class="image-grid recent-grid"
+              aria-live="polite"
+            ></div>
+          </section>
+        </section>
+
+        <section id="history-page" aria-labelledby="history-title" hidden>
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">你的灵感档案</p>
+              <h1 id="history-title">
+                每一次创作，都值得留下<span class="accent">。</span>
+              </h1>
+              <p class="page-description">
+                浏览画面、找回提示词，让灵感接着发生。
+              </p>
+            </div>
+            <a href="#studio" class="button primary"
+              ><i class="ph ph-plus" aria-hidden="true"></i>新的创作</a
+            >
+          </div>
+          <div class="history-stats">
+            <div><span id="stat-total">0</span><small>创作记录</small></div>
+            <div><span id="stat-images">0</span><small>已保存图片</small></div>
+            <div><span id="stat-processing">0</span><small>生成中</small></div>
+          </div>
+          <div class="history-toolbar">
+            <div class="search-field">
+              <i class="ph ph-magnifying-glass" aria-hidden="true"></i
+              ><label for="search" class="sr-only">搜索历史提示词或模型</label
+              ><input
+                type="search"
+                id="search"
+                placeholder="搜索提示词或模型…"
+                maxlength="500"
+              />
+            </div>
+            <label for="status-filter" class="sr-only">筛选状态</label
+            ><select id="status-filter">
+              <option value="all">全部状态</option>
+              <option value="completed">已完成</option>
+              <option value="processing">生成中</option>
+              <option value="failed">未成功</option></select
+            ><button
+              id="refresh-history"
+              class="button secondary icon-button"
+              aria-label="刷新历史记录"
+              title="刷新"
+            >
+              <i class="ph ph-arrows-clockwise" aria-hidden="true"></i>
+            </button>
+          </div>
+          <p id="history-summary" class="muted small" aria-live="polite"></p>
+          <div id="history-grid" class="image-grid history-grid"></div>
+          <nav
+            id="pagination"
+            class="pagination"
+            aria-label="历史记录分页"
+          ></nav>
+        </section>
+        <footer class="page-footer">
+          <span
+            >映象<span class="footer-separator">/</span>想象力，自有形状。</span
+          ><span>Powered by sub2api</span>
+        </footer>
+      </main>
+    </div>
+
+    <dialog
+      id="settings-dialog"
+      class="settings-dialog"
+      aria-labelledby="settings-title"
+    >
+      <div class="dialog-heading">
+        <div>
+          <span class="dialog-icon"
+            ><i class="ph ph-plugs-connected" aria-hidden="true"></i
+          ></span>
+          <h2 id="settings-title">连接 sub2api</h2>
+          <p>连接你的生图服务，开始创作。</p>
+        </div>
+        <button
+          type="button"
+          class="icon-button close-dialog"
+          data-close="settings-dialog"
+          aria-label="关闭设置"
+        >
+          <i class="ph ph-x" aria-hidden="true"></i>
+        </button>
+      </div>
+      <form id="settings-form">
+        <div class="field">
+          <label for="base-url">服务地址</label
+          ><input
+            type="url"
+            id="base-url"
+            placeholder="https://sub2api.example.com"
+            required
+            autocomplete="url"
+          />
+          <p class="field-help">填写服务根地址或以 /v1 结尾的地址。</p>
+        </div>
+        <div class="field">
+          <label for="api-key"
+            >API Key<span id="key-state" class="muted small"></span></label
+          ><input
+            type="password"
+            id="api-key"
+            placeholder="输入 sub2api 的 API Key"
+            autocomplete="new-password"
+            maxlength="2048"
+          />
+          <p class="field-help">密钥仅保存在服务端；留空保留已保存的密钥。</p>
+        </div>
+        <div class="field">
+          <label for="default-model">默认模型</label
+          ><input
+            id="default-model"
+            list="model-options"
+            value="gpt-image-2"
+            maxlength="120"
+            required
+          />
+        </div>
+        <div id="settings-error" class="inline-error" role="alert" hidden></div>
+        <div class="settings-tip">
+          <i class="ph ph-info" aria-hidden="true"></i
+          ><span
+            >模型与参数取决于你的 sub2api 分组权限。basic
+            分组请在创作时打开基础兼容模式。</span
+          >
+        </div>
+        <button id="save-settings" class="button primary" type="submit">
+          <i class="ph ph-check" aria-hidden="true"></i>保存连接
+        </button>
+      </form>
+    </dialog>
+
+    <dialog
+      id="detail-dialog"
+      class="detail-dialog"
+      aria-labelledby="detail-title"
+    >
+      <div class="detail-top">
+        <h2 id="detail-title">创作详情</h2>
+        <button
+          class="icon-button"
+          data-close="detail-dialog"
+          aria-label="关闭详情"
+        >
+          <i class="ph ph-x" aria-hidden="true"></i>
+        </button>
+      </div>
+      <div id="detail-content"></div>
+    </dialog>
+    <div id="toast" class="toast" role="status" hidden>
+      <i class="ph ph-check-circle" aria-hidden="true"></i><span></span>
+    </div>
+    <noscript
+      ><div class="noscript">
+        请启用 JavaScript 以使用生图工作台。
+      </div></noscript
+    >
+  </body>
+</html>
