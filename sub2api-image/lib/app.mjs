@@ -1,6 +1,6 @@
 import express from 'express';
 import { DatabaseSync } from 'node:sqlite';
-import { createHash, createHmac, randomBytes, randomUUID, scrypt, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { unlink, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
@@ -184,39 +184,13 @@ export function createApp(options = {}) {
     catch (error) { db.exec('ROLLBACK'); throw error; }
   }
 
-  const adminUsername = String(options.adminUsername ?? process.env.ADMIN_USERNAME ?? 'admin').toLowerCase();
-  const adminPassword = options.adminPassword ?? process.env.ADMIN_PASSWORD ?? '';
-  if (!/^[a-z0-9_]{3,32}$/.test(adminUsername)) throw new Error('ADMIN_USERNAME 须为 3 至 32 位字母、数字或下划线。');
-  if (adminPassword) {
-    if (typeof adminPassword !== 'string' || adminPassword.length < 8 || adminPassword.length > 128) throw new Error('ADMIN_PASSWORD 长度须为 8 至 128 字符。');
-    const seedId = db.prepare("SELECT value FROM app_settings WHERE key='admin_seed_user_id'").get()?.value;
-    const seed = seedId ? db.prepare('SELECT * FROM users WHERE id=?').get(seedId) : null;
-    const collision = db.prepare('SELECT id FROM users WHERE username=?').get(adminUsername);
-    if ((collision && collision.id !== seed?.id) || (seed && seed.role !== 'admin')) {
-      db.close();
-      throw new Error('管理员用户名与已有账号冲突。请为 ADMIN_USERNAME 选择其他名称；已有普通用户不会自动成为管理员。');
-    }
-    if (seed) {
-      const unchanged = sameBytes(scryptSync(adminPassword, seed.password_salt, 64), Buffer.from(seed.password_hash, 'hex'));
-      transaction(() => {
-        if (!unchanged) {
-          const salt = randomBytes(16).toString('hex');
-          db.prepare('UPDATE users SET password_salt=?,password_hash=? WHERE id=?').run(salt, scryptSync(adminPassword, salt, 64).toString('hex'), seed.id);
-          db.prepare('DELETE FROM sessions WHERE user_id=?').run(seed.id);
-        }
-        db.prepare("UPDATE users SET username=?,tier='paid' WHERE id=?").run(adminUsername, seed.id);
-      });
-    } else {
-      const id = randomUUID();
-      const salt = randomBytes(16).toString('hex');
-      const hash = scryptSync(adminPassword, salt, 64).toString('hex');
-      transaction(() => {
-        db.prepare("INSERT INTO users(id,username,password_salt,password_hash,role,tier,created_at) VALUES(?,?,?,?,'admin','paid',?)")
-          .run(id, adminUsername, salt, hash, isoNow());
-        db.prepare("INSERT INTO app_settings(key,value) VALUES('admin_seed_user_id',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(id);
-      });
-    }
-  }
+  // Existing installations without an administrator belong to their earliest account.
+  // Keep every existing administrator and password when upgrading.
+  transaction(() => {
+    if (db.prepare("SELECT id FROM users WHERE role='admin' LIMIT 1").get()) return;
+    const firstUser = db.prepare('SELECT id FROM users ORDER BY created_at ASC, rowid ASC LIMIT 1').get();
+    if (firstUser) db.prepare("UPDATE users SET role='admin',tier='paid' WHERE id=?").run(firstUser.id);
+  });
 
   function dayInfo() {
     const shifted = new Date(nowMs() + 8 * 60 * 60 * 1000);
@@ -291,7 +265,10 @@ export function createApp(options = {}) {
   });
 
   const publicUser = user => user ? { id: user.id, username: user.username, role: user.role, tier: user.role === 'admin' ? 'paid' : user.tier } : null;
-  const me = req => ({ user: publicUser(req.user), quota: quotaFor(req.quotaSubject, req.tier) });
+  const me = req => ({
+    user: publicUser(req.user), quota: quotaFor(req.quotaSubject, req.tier),
+    needsSetup: !db.prepare('SELECT id FROM users LIMIT 1').get(),
+  });
   function requireAdmin(req) {
     if (!req.user) throw httpError(401, '请先登录管理员账号。');
     if (req.user.role !== 'admin') throw httpError(403, '此操作需要管理员权限。');
@@ -312,13 +289,17 @@ export function createApp(options = {}) {
   app.get('/api/me', (req, res) => res.json(me(req)));
   app.post('/api/auth/register', async (req, res) => {
     const { username, password } = credentials(req.body);
-    if (username === adminUsername || db.prepare('SELECT id FROM users WHERE username=?').get(username)) throw httpError(409, '此用户名已被使用或保留，请换一个用户名。');
+    if (db.prepare('SELECT id FROM users WHERE username=?').get(username)) throw httpError(409, '此用户名已被使用，请换一个用户名。');
     const salt = randomBytes(16).toString('hex');
     const hash = (await derivePassword(password, salt, 64)).toString('hex');
     const id = randomUUID();
     try {
-      db.prepare("INSERT INTO users(id,username,password_salt,password_hash,role,tier,created_at) VALUES(?,?,?,?,'user','registered',?)")
-        .run(id, username, salt, hash, isoNow());
+      transaction(() => {
+        // Decide after password hashing, inside the same write transaction as insertion.
+        const firstUser = !db.prepare('SELECT id FROM users LIMIT 1').get();
+        db.prepare('INSERT INTO users(id,username,password_salt,password_hash,role,tier,created_at) VALUES(?,?,?,?,?,?,?)')
+          .run(id, username, salt, hash, firstUser ? 'admin' : 'user', firstUser ? 'paid' : 'registered', isoNow());
+      });
     } catch (error) {
       if (error.code?.startsWith('SQLITE_CONSTRAINT') || /UNIQUE constraint/i.test(error.message)) throw httpError(409, '此用户名已被使用，请换一个用户名。');
       throw error;

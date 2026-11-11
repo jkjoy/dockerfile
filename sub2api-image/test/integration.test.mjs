@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
+import { scryptSync } from 'node:crypto';
 import { mkdtemp, rm, stat, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
@@ -77,12 +78,12 @@ async function fixture(t, options = {}) {
     }
   });
   upstreamUrl = await listen(upstream);
-  const { setupData, ...appOptions } = options;
+  const { setupData, bootstrapAdmin = true, ...appOptions } = options;
   await setupData?.({ dataDir, upstreamUrl });
   let service;
   let appServer;
   let appUrl;
-  const bootOptions = { dataDir, baseUrl: upstreamUrl, apiKey, model: 'gpt-image-2', trustProxy: true, adminUsername, adminPassword, ...appOptions };
+  const bootOptions = { dataDir, baseUrl: upstreamUrl, apiKey, model: 'gpt-image-2', trustProxy: true, ...appOptions };
   const boot = async (config) => {
     service = await createApp(config);
     appServer = createServer(service.app);
@@ -152,6 +153,10 @@ async function fixture(t, options = {}) {
       throw new Error(`Generation ${id} did not finish within 8 seconds`);
     };
     return { request, me, register, login, generate, completed, cookies };
+  }
+  if (bootstrapAdmin) {
+    const firstAdmin = await client('203.0.113.254').register(adminUsername, { password: adminPassword });
+    assert.equal(firstAdmin.user.role, 'admin');
   }
   return {
     dataDir, requests, upstreamUrl, client, releaseHeld,
@@ -601,14 +606,119 @@ test('a valid account session without a visitor cookie still scopes history to t
   assert.equal((await account.request(visitorDone.images[0].url)).status, 404);
 });
 
-test('concurrent registration cannot claim the reserved administrator username', async (t) => {
-  const f = await fixture(t, { adminPassword: '' });
-  const attempts = await Promise.all(Array.from({ length: 3 }, (_, index) => f.client(`203.0.113.${100 + index}`).request('/api/auth/register', {
-    method: 'POST', body: { username: adminUsername.toUpperCase(), password: userPassword, role: 'admin', tier: 'paid' },
-  })));
-  assert.ok(attempts.every((response) => response.status === 409));
-  await f.restart({ adminPassword });
-  const admin = f.client('203.0.113.110');
-  assert.equal((await admin.login()).user.role, 'admin');
-  assert.equal((await (await admin.request('/api/admin/users')).json()).total, 1);
+test('concurrent first registrations create exactly one administrator and later users cannot forge privileges', async (t) => {
+  const f = await fixture(t, { bootstrapAdmin: false });
+  const clients = Array.from({ length: 3 }, (_, index) => f.client(`203.0.113.${100 + index}`));
+  assert.equal((await clients[0].me()).needsSetup, true);
+  const attempts = await Promise.all(clients.map((client, index) => client.register(`creator_${index}`, { role: 'admin', tier: 'paid' })));
+  assert.equal(attempts.filter((result) => result.user.role === 'admin').length, 1);
+  assert.equal(attempts.filter((result) => result.user.role === 'user' && result.user.tier === 'registered' && result.quota.limit === 10).length, 2);
+  const adminIndex = attempts.findIndex((result) => result.user.role === 'admin');
+  assert.equal(attempts[adminIndex].user.tier, 'paid');
+  assert.equal(attempts[adminIndex].quota.limit, 100);
+  assert.equal((await f.client('203.0.113.120').me()).needsSetup, false);
+  await f.restart();
+  for (let index = 0; index < clients.length; index++) assert.equal((await clients[index].me()).user.role, attempts[index].user.role);
+  const later = await f.client('203.0.113.121').register('later_creator', { role: 'admin', tier: 'paid' });
+  assert.equal(later.user.role, 'user');
+  assert.equal(later.user.tier, 'registered');
+  const users = await (await clients[adminIndex].request('/api/admin/users')).json();
+  assert.equal(users.total, 4);
+  assert.equal(users.items.filter((user) => user.role === 'admin').length, 1);
+});
+
+test('the first account may use admin as its name and setup status disappears immediately', async (t) => {
+  const f = await fixture(t, { bootstrapAdmin: false });
+  const first = f.client();
+  const before = await first.me();
+  assert.equal(before.needsSetup, true);
+  assert.equal(before.user, null);
+  assert.equal(before.quota.limit, 3);
+  const registered = await first.register('admin');
+  assert.equal(registered.user.role, 'admin');
+  assert.equal(registered.user.tier, 'paid');
+  assert.equal(registered.quota.limit, 100);
+  assert.equal(registered.needsSetup, false);
+  assert.equal((await first.me()).needsSetup, false);
+  const second = await f.client('203.0.113.122').register('second_user');
+  assert.equal(second.user.role, 'user');
+  assert.equal(second.quota.limit, 10);
+});
+
+test('obsolete ADMIN environment variables never create accounts or change the first administrator password', async (t) => {
+  const saved = { ADMIN_USERNAME: process.env.ADMIN_USERNAME, ADMIN_PASSWORD: process.env.ADMIN_PASSWORD };
+  t.after(() => { for (const [name, value] of Object.entries(saved)) { if (value === undefined) delete process.env[name]; else process.env[name] = value; } });
+  process.env.ADMIN_USERNAME = 'injected_admin';
+  process.env.ADMIN_PASSWORD = 'obsolete-env-password';
+  const f = await fixture(t, { bootstrapAdmin: false });
+  const first = f.client();
+  assert.equal((await first.me()).needsSetup, true);
+  await first.register('injected_admin', { password: userPassword });
+  process.env.ADMIN_PASSWORD = 'changed-obsolete-env-password';
+  await f.restart();
+  const fresh = f.client('203.0.113.123');
+  const current = await fresh.login('injected_admin', userPassword);
+  assert.equal(current.user.role, 'admin');
+  assert.equal((await (await fresh.request('/api/admin/users')).json()).total, 1);
+  const obsolete = await f.client('203.0.113.124').request('/api/auth/login', { method: 'POST', body: { username: 'injected_admin', password: process.env.ADMIN_PASSWORD } });
+  assert.equal(obsolete.status, 401);
+});
+
+test('migration promotes the earliest existing user when an older database has no administrator', async (t) => {
+  const f = await fixture(t, {
+    bootstrapAdmin: false,
+    setupData: async ({ dataDir }) => {
+      const db = new DatabaseSync(join(dataDir, 'history.sqlite'));
+      db.exec(`CREATE TABLE users (id TEXT PRIMARY KEY,username TEXT NOT NULL COLLATE NOCASE UNIQUE,password_salt TEXT NOT NULL,password_hash TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'user',tier TEXT NOT NULL DEFAULT 'registered',created_at TEXT NOT NULL)`);
+      for (const [id, username, date] of [
+        ['existing-newer', 'newer_user', '2026-01-02T00:00:00.000Z'],
+        ['existing-first', 'first_user', '2026-01-01T00:00:00.000Z'],
+        ['existing-tie', 'tied_user', '2026-01-01T00:00:00.000Z'],
+      ]) {
+        const salt = `test-salt-${id}`;
+        db.prepare('INSERT INTO users(id,username,password_salt,password_hash,created_at) VALUES(?,?,?,?,?)').run(id, username, salt, scryptSync(userPassword, salt, 64).toString('hex'), date);
+      }
+      db.close();
+    },
+  });
+  const first = f.client();
+  const migrated = await first.login('first_user', userPassword);
+  assert.equal(migrated.user.id, 'existing-first');
+  assert.equal(migrated.user.role, 'admin');
+  assert.equal(migrated.user.tier, 'paid');
+  assert.equal(migrated.needsSetup, false);
+  const users = await (await first.request('/api/admin/users')).json();
+  assert.equal(users.items.filter((user) => user.role === 'admin').length, 1);
+  for (const username of ['newer_user', 'tied_user']) {
+    const user = await f.client().login(username, userPassword);
+    assert.equal(user.user.role, 'user');
+  }
+  const later = await f.client().register('new_registration', { role: 'admin', tier: 'paid' });
+  assert.equal(later.user.role, 'user');
+  await f.restart();
+  assert.equal((await first.me()).user.role, 'admin');
+});
+
+test('migration preserves an existing administrator even when a normal account is older', async (t) => {
+  const f = await fixture(t, {
+    bootstrapAdmin: false,
+    setupData: async ({ dataDir }) => {
+      const db = new DatabaseSync(join(dataDir, 'history.sqlite'));
+      db.exec(`CREATE TABLE users (id TEXT PRIMARY KEY,username TEXT NOT NULL COLLATE NOCASE UNIQUE,password_salt TEXT NOT NULL,password_hash TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'user',tier TEXT NOT NULL DEFAULT 'registered',created_at TEXT NOT NULL)`);
+      for (const [id, username, role, tier, date] of [
+        ['older-user', 'older_user', 'user', 'registered', '2025-01-01T00:00:00.000Z'],
+        ['existing-admin', 'existing_admin', 'admin', 'paid', '2026-01-01T00:00:00.000Z'],
+      ]) {
+        const salt = `test-salt-${id}`;
+        db.prepare('INSERT INTO users(id,username,password_salt,password_hash,role,tier,created_at) VALUES(?,?,?,?,?,?,?)').run(id, username, salt, scryptSync(userPassword, salt, 64).toString('hex'), role, tier, date);
+      }
+      db.close();
+    },
+  });
+  const admin = f.client();
+  assert.equal((await admin.login('existing_admin', userPassword)).user.role, 'admin');
+  assert.equal((await f.client().login('older_user', userPassword)).user.role, 'user');
+  const users = await (await admin.request('/api/admin/users')).json();
+  assert.equal(users.items.filter((user) => user.role === 'admin').length, 1);
+  assert.equal(users.items.find((user) => user.role === 'admin').id, 'existing-admin');
 });
