@@ -47,6 +47,22 @@ docker build -t jkjoy/sub2api-image:latest .
 docker compose up -d
 ```
 
+### Nginx 反向代理
+
+一层 Nginx 代理时，在 `.env` 中设置 `TRUST_PROXY=1`，执行 `docker compose up -d`。Nginx 与应用在同一宿主机时，保留默认 `BIND_ADDRESS=127.0.0.1`，在网站的 `server` 配置中加入：
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:3080;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Forwarded-Host $http_host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+}
+```
+
+这些请求头保留浏览器访问的域名、端口、协议和客户端 IP，用于来源验证、登录 Cookie 及游客额度识别。启用 `TRUST_PROXY` 后，后端端口应仅允许受控代理访问，避免客户端直接提交伪造的代理头；多层代理按实际跳数配置。
+
 ## 使用与每日额度
 
 无需注册即可输入提示词，选择参数并点击「开始生成」。桌面支持 `Ctrl+Enter`，macOS 支持 `⌘+Enter`。每次提交创建独立记录，同一时刻执行一个任务，最多允许 20 个正在处理或排队的任务。
@@ -132,6 +148,7 @@ npm start
 - **没有可用账号或模型权限错误**：确认 Key 的分组支持生图和配置的模型；basic 分组设置 `SUB2API_BASIC_MODE=true`。
 - **参数错误**：调整到上游实际支持的尺寸、质量、数量或背景；模型由部署者在环境变量中修改。
 - **游客额度识别不正确**：检查 `TRUST_PROXY` 和反向代理是否按实际访问路径配置；同一公网 IP 的游客共享 3 张额度。
+- **反代后注册提示「请从本应用页面提交请求」**：按上述 Nginx 示例保留原始 `Host`、`X-Forwarded-Host`、`X-Forwarded-Proto`，并配置正确的 `TRUST_PROXY`，更新容器后从网站页面重试。
 - **生成超时**：默认最多等待 900 秒。超时后上游仍可能生成或计费，应先检查 sub2api 状态，再决定是否重试；程序不会自动重试生图请求。
 - **反向代理连接中断**：应用与 sub2api 之间的代理需允许长时间请求；浏览器与本应用之间使用短请求轮询。
 - **Compose 无法连接宿主机的 sub2api**：容器的 `localhost` 指向自身。Docker Desktop 可使用 `http://host.docker.internal:端口`；同一 Docker 网络可使用 sub2api 服务名与容器端口。

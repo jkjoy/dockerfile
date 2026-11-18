@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createServer } from 'node:http';
+import { createServer, request as httpRequest } from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
 import { scryptSync } from 'node:crypto';
 import { mkdtemp, rm, stat, writeFile, mkdir } from 'node:fs/promises';
@@ -26,6 +26,24 @@ async function listen(server) {
 async function stop(server) {
   server.closeIdleConnections?.();
   await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+}
+
+function requestWithHost(url, options) {
+  // Node fetch overrides Host, so use HTTP directly when simulating a reverse proxy.
+  return new Promise((resolve, reject) => {
+    const request = httpRequest(url, { method: options.method, headers: options.headers }, (incoming) => {
+      const chunks = [];
+      incoming.on('data', (chunk) => chunks.push(chunk));
+      incoming.on('error', reject);
+      incoming.on('end', () => {
+        const headers = new Headers();
+        for (let index = 0; index < incoming.rawHeaders.length; index += 2) headers.append(incoming.rawHeaders[index], incoming.rawHeaders[index + 1]);
+        resolve(new Response([204, 304].includes(incoming.statusCode) ? null : Buffer.concat(chunks), { status: incoming.statusCode, headers }));
+      });
+    });
+    request.on('error', reject);
+    request.end(options.body);
+  });
 }
 
 async function fixture(t, options = {}) {
@@ -104,7 +122,8 @@ async function fixture(t, options = {}) {
   function client(ip = '203.0.113.1') {
     const cookies = new Map();
     const request = async (path, init = {}) => {
-      const response = await fetch(`${appUrl}${path}`, {
+      const fetchRequest = init.headers?.host ? requestWithHost : fetch;
+      const response = await fetchRequest(`${appUrl}${path}`, {
         ...init,
         headers: { 'content-type': 'application/json', 'x-forwarded-for': ip, ...(cookies.size ? { cookie: [...cookies].map(([name, value]) => `${name}=${value}`).join('; ') } : {}), ...init.headers },
         body: init.body === undefined ? undefined : JSON.stringify(init.body),
@@ -721,4 +740,94 @@ test('migration preserves an existing administrator even when a normal account i
   const users = await (await admin.request('/api/admin/users')).json();
   assert.equal(users.items.filter((user) => user.role === 'admin').length, 1);
   assert.equal(users.items.find((user) => user.role === 'admin').id, 'existing-admin');
+});
+
+test('trusted reverse proxies allow registration, administrator login and generation using the public host and port', async (t) => {
+  for (const publicHost of ['images.example.test', 'images.example.test:8443']) {
+    await t.test(publicHost, async (caseContext) => {
+      const f = await fixture(caseContext, { bootstrapAdmin: false, trustProxy: 1 });
+      const client = f.client();
+      const headers = { host: 'sub2api-image:3000', origin: `https://${publicHost}`, 'x-forwarded-host': publicHost, 'x-forwarded-proto': 'https' };
+      const registration = await client.request('/api/auth/register', { method: 'POST', headers, body: { username: 'admin', password: adminPassword } });
+      assert.equal(registration.status, 201, await registration.clone().text());
+      assert.equal((await registration.json()).user.role, 'admin');
+      const registrationCookie = registration.headers.getSetCookie().find((header) => header.startsWith('sub2api_session='));
+      assert.ok(registrationCookie);
+      assert.match(registrationCookie, /;\s*Secure(?:;|$)/i);
+      assert.equal((await client.request('/api/auth/logout', { method: 'POST', headers })).status, 200);
+      const login = await client.request('/api/auth/login', { method: 'POST', headers, body: { username: 'admin', password: adminPassword } });
+      assert.equal(login.status, 200, await login.clone().text());
+      assert.match(login.headers.getSetCookie().find((header) => header.startsWith('sub2api_session=')), /;\s*Secure(?:;|$)/i);
+      const generation = await client.request('/api/generations', { method: 'POST', headers, body: { prompt: 'An image submitted through a reverse proxy' } });
+      assert.equal(generation.status, 202, await generation.clone().text());
+      assert.equal((await client.completed((await generation.json()).generation.id)).status, 'completed');
+    });
+  }
+});
+
+test('same-origin browser Fetch Metadata allows a proxy-rewritten Host when no forwarded host is present', async (t) => {
+  const f = await fixture(t, { bootstrapAdmin: false, trustProxy: 1 });
+  const client = f.client();
+  const headers = { host: 'sub2api-image:3000', origin: 'https://images.example.test:8443', 'x-forwarded-proto': 'https', 'sec-fetch-site': 'same-origin' };
+  const registration = await client.request('/api/auth/register', { method: 'POST', headers, body: { username: 'admin', password: adminPassword } });
+  assert.equal(registration.status, 201, await registration.clone().text());
+  assert.equal((await registration.json()).user.role, 'admin');
+  assert.match(registration.headers.getSetCookie().find((header) => header.startsWith('sub2api_session=')), /;\s*Secure(?:;|$)/i);
+  assert.equal((await client.request('/api/auth/logout', { method: 'POST', headers })).status, 200);
+  assert.equal((await client.request('/api/auth/login', { method: 'POST', headers, body: { username: 'admin', password: adminPassword } })).status, 200);
+  const submitted = await client.request('/api/generations', { method: 'POST', headers, body: { prompt: 'A browser request behind a Host-rewriting proxy' } });
+  assert.equal(submitted.status, 202, await submitted.clone().text());
+  assert.equal((await client.completed((await submitted.json()).generation.id)).status, 'completed');
+});
+
+test('untrusted forwarded host and protocol cannot bypass Origin checks or mark cookies Secure', async (t) => {
+  const f = await fixture(t, { bootstrapAdmin: false, trustProxy: false });
+  const client = f.client();
+  const headers = { host: 'sub2api-image:3000', origin: 'https://attacker.example.test', 'x-forwarded-host': 'attacker.example.test', 'x-forwarded-proto': 'https' };
+  const rejected = await client.request('/api/auth/register', { method: 'POST', headers, body: { username: 'intruder', password: userPassword } });
+  assert.equal(rejected.status, 403);
+  const identity = await client.request('/api/me', { headers });
+  assert.equal((await identity.json()).needsSetup, true);
+  const cookie = identity.headers.getSetCookie().find((header) => header.startsWith('sub2api_guest='));
+  assert.ok(cookie);
+  assert.doesNotMatch(cookie, /;\s*Secure(?:;|$)/i);
+  assert.equal(f.requests.length, 0);
+});
+
+test('same-site and cross-site browser metadata are rejected even when Origin matches a trusted public host', async (t) => {
+  const f = await fixture(t, { bootstrapAdmin: false, trustProxy: 1 });
+  const client = f.client();
+  for (const site of ['same-site', 'cross-site']) {
+    for (const path of ['/api/auth/register', '/api/auth/login', '/api/generations']) {
+      const headers = { host: 'sub2api-image:3000', origin: 'https://images.example.test', 'x-forwarded-host': 'images.example.test', 'x-forwarded-proto': 'https', 'sec-fetch-site': site };
+      const response = await client.request(path, { method: 'POST', headers, body: { username: 'rejected_account', password: userPassword, prompt: 'This cross-origin submission must be rejected' } });
+      assert.equal(response.status, 403, `${site} ${path}: ${await response.clone().text()}`);
+    }
+  }
+  assert.equal((await client.me()).needsSetup, true);
+  assert.equal(f.requests.length, 0);
+});
+
+test('requests without same-origin Fetch Metadata still require a matching valid Origin when one is provided', async (t) => {
+  const f = await fixture(t, { bootstrapAdmin: false, trustProxy: 1 });
+  const client = f.client();
+  for (const origin of ['https://attacker.example.test', 'https://images.example.test:8443', 'http://images.example.test', 'null', 'malformed origin']) {
+    const response = await client.request('/api/auth/register', {
+      method: 'POST', headers: { host: 'sub2api-image:3000', origin, 'x-forwarded-host': 'images.example.test', 'x-forwarded-proto': 'https' },
+      body: { username: 'rejected_account', password: userPassword },
+    });
+    assert.equal(response.status, 403, `${origin}: ${await response.clone().text()}`);
+  }
+  for (const origin of ['null', 'malformed origin', 'ftp://images.example.test']) {
+    const response = await client.request('/api/auth/register', {
+      method: 'POST', headers: { host: 'sub2api-image:3000', origin, 'sec-fetch-site': 'same-origin' },
+      body: { username: 'rejected_account', password: userPassword },
+    });
+    assert.equal(response.status, 403, `${origin}: ${await response.clone().text()}`);
+  }
+  const direct = await client.request('/api/auth/register', {
+    method: 'POST', headers: { host: 'sub2api-image:3000', origin: 'http://sub2api-image:3000' },
+    body: { username: 'direct_admin', password: adminPassword },
+  });
+  assert.equal(direct.status, 201, await direct.clone().text());
 });

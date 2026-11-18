@@ -231,9 +231,18 @@ export function createApp(options = {}) {
     res.set('Content-Security-Policy', "default-src 'self'; img-src 'self' blob: data:; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
     if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
       const origin = req.get('origin');
+      const fetchSite = req.get('sec-fetch-site');
       let sameOrigin = !origin;
-      try { sameOrigin = !origin || new URL(origin).host === req.get('host'); } catch { sameOrigin = false; }
-      if (!sameOrigin || req.get('sec-fetch-site') === 'cross-site') return res.status(403).json({ error: '请从本应用页面提交请求。' });
+      try {
+        if (origin) {
+          const source = new URL(origin);
+          // Browsers attest same-origin even when a proxy rewrites Host. Without
+          // that signal, Express honors forwarded host/protocol only from trusted proxies.
+          sameOrigin = ['http:', 'https:'].includes(source.protocol)
+            && (fetchSite === 'same-origin' || source.origin === new URL(`${req.protocol}://${req.host}`).origin);
+        }
+      } catch { sameOrigin = false; }
+      if (!sameOrigin || ['cross-site', 'same-site'].includes(fetchSite)) return res.status(403).json({ error: '请从本应用页面提交请求。' });
       const contentType = (req.get('content-type') || '').split(';', 1)[0].trim().toLowerCase();
       if (contentType !== 'application/json') return res.status(415).json({ error: '请求必须使用 application/json。' });
     }
