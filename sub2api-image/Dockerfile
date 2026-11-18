@@ -14,6 +14,7 @@ RUN npm ci --omit=dev --ignore-scripts --no-fund --no-audit \
 
 COPY server.mjs ./
 COPY lib ./lib
+COPY views ./views
 COPY public ./public
 
 USER node

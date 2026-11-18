@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f6f7f5" />
+    <title>初始化向导 · 映象</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/vendor/phosphor/regular/style.css" />
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/setup.css" />
+    <script type="module" src="/setup.js"></script>
+  </head>
+  <body class="setup-body">
+    <main class="setup-shell">
+      <div class="setup-brand">
+        <span class="brand-mark"
+          ><i class="ph ph-aperture" aria-hidden="true"></i></span
+        ><span>映象<small>IMAGE STUDIO</small></span>
+      </div>
+      <div id="setup-loading" class="setup-loading" role="status">
+        <div class="spinner" aria-hidden="true"></div>
+        <p>正在检查初始化状态…</p>
+      </div>
+      <section
+        id="setup-card"
+        class="setup-card"
+        aria-labelledby="setup-title"
+        hidden
+      >
+        <ol class="setup-steps" aria-label="初始化步骤">
+          <li id="setup-step-account" class="active" aria-current="step">
+            <span>1</span>创建管理员
+          </li>
+          <li id="setup-step-done"><span>2</span>完成初始化</li>
+        </ol>
+        <div id="setup-account-view">
+          <p class="setup-eyebrow">从这里，开始你的创作空间</p>
+          <h1 id="setup-title">欢迎使用映象<span class="accent">。</span></h1>
+          <p class="setup-intro">
+            首次使用，先创建管理员账号。完成后即可进入工作台，管理用户和创作额度。
+          </p>
+          <form id="setup-form">
+            <div class="field">
+              <label for="setup-username">管理员用户名</label
+              ><input
+                id="setup-username"
+                name="username"
+                autocomplete="username"
+                minlength="3"
+                maxlength="32"
+                pattern="[a-zA-Z0-9_]{3,32}"
+                placeholder="3–32 位字母、数字或下划线"
+                required
+              />
+            </div>
+            <div class="field">
+              <label for="setup-password">密码</label
+              ><input
+                id="setup-password"
+                name="password"
+                type="password"
+                autocomplete="new-password"
+                minlength="8"
+                maxlength="128"
+                placeholder="至少 8 位字符"
+                required
+              />
+            </div>
+            <div class="field">
+              <label for="setup-confirm-password">确认密码</label
+              ><input
+                id="setup-confirm-password"
+                type="password"
+                autocomplete="new-password"
+                minlength="8"
+                maxlength="128"
+                placeholder="再次输入密码"
+                required
+              />
+            </div>
+            <div
+              id="setup-error"
+              class="inline-error"
+              role="alert"
+              hidden
+            ></div>
+            <button
+              id="setup-submit"
+              class="button primary"
+              type="submit"
+              disabled
+            >
+              <i class="ph ph-arrow-right" aria-hidden="true"></i
+              ><span>完成初始化</span>
+            </button>
+          </form>
+          <p class="setup-once">
+            <i class="ph ph-lock-simple" aria-hidden="true"></i
+            >初始化只需一次，之后的新用户通过首页注册。
+          </p>
+        </div>
+        <div id="setup-complete-view" class="setup-complete" hidden>
+          <span class="setup-success-icon"
+            ><i class="ph ph-check-circle" aria-hidden="true"></i
+          ></span>
+          <h1 id="setup-complete-title">
+            创作空间已就绪<span class="accent">。</span>
+          </h1>
+          <p id="setup-complete-description">
+            管理员账号已创建，并已自动登录。
+          </p>
+          <div class="setup-summary">
+            <span
+              ><i class="ph ph-user-circle" aria-hidden="true"></i
+              >管理员账号<strong id="setup-created-username"></strong></span
+            ><span
+              ><i class="ph ph-sparkle" aria-hidden="true"></i
+              >每日创作额度<strong>100 张</strong></span
+            >
+          </div>
+          <button id="setup-enter" class="button primary" type="button">
+            进入创作工作台<i class="ph ph-arrow-right" aria-hidden="true"></i>
+          </button>
+        </div>
+      </section>
+      <div id="setup-load-error" class="setup-card" hidden>
+        <h1>暂时无法读取初始化状态</h1>
+        <p id="setup-load-error-message" class="setup-intro"></p>
+        <button id="setup-retry" class="button primary" type="button">
+          重新连接
+        </button>
+      </div>
+      <footer class="setup-footer">映象 / 想象力，自有形状。</footer>
+    </main>
+    <noscript
+      ><div class="noscript">请启用 JavaScript 以完成初始化。</div></noscript
+    >
+  </body>
+</html>

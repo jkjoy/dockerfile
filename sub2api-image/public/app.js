@@ -20,9 +20,11 @@ let previewSignature = '';
 let detailSignature = '';
 
 async function api(path, { method = 'GET', body } = {}) {
+  const mutation = !['GET', 'HEAD', 'OPTIONS'].includes(method);
+  if (mutation && !state.me?.csrfToken) await loadMe();
   const response = await fetch(path, {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(mutation ? { 'X-CSRF-Token': state.me.csrfToken } : {}) },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
   if (response.status === 204) return null;
@@ -117,7 +119,7 @@ function renderQuota() {
   const tier = user?.role === 'admin' ? '管理员' : tierLabels[quota.tier] || '游客';
   $('#quota-title').textContent = `今日还可生成 ${quota.remaining} 张图片`;
   $('#quota-description').textContent = `${tier} · 每日 ${quota.limit} 张${quota.reserved ? ` · ${quota.reserved} 张生成中` : ''} · 北京时间零点更新`;
-  $('#quota-action').textContent = !user ? (state.me.needsSetup ? '创建管理员账号' : '注册领取每日 10 张') : quota.tier === 'paid' ? '查看我的额度' : '升级享每日 100 张';
+  $('#quota-action').textContent = !user ? '注册领取每日 10 张' : quota.tier === 'paid' ? '查看我的额度' : '升级享每日 100 张';
   $('#quota-action').dataset.action = user ? 'account' : 'register';
   $('#sidebar-username').textContent = user?.username || '游客创作';
   $('#sidebar-status').textContent = `${tier} · 今日剩余 ${quota.remaining} 张`;
@@ -141,6 +143,7 @@ function renderQuota() {
 }
 
 function applyMe(result) {
+  if (result.needsSetup) { location.replace('/setup'); return; }
   const changed = (state.me?.user?.id || null) !== (result.user?.id || null);
   if (changed) saveDraft();
   state.me = result;
@@ -337,10 +340,9 @@ function setView() {
 
 function renderAuthCopy() {
   const register = state.authMode === 'register';
-  const setup = Boolean(state.me?.needsSetup);
-  $('#account-title').textContent = register ? (setup ? '创建第一个管理员账号' : '给灵感一个专属空间') : '欢迎回到映象';
-  $('#account-description').textContent = setup ? '首次注册的用户将成为管理员，可管理账号和每日额度。' : '无需登录也能创作，注册后每天可生成 10 张。';
-  $('#auth-submit').textContent = register ? (setup ? '创建管理员账号' : '注册并开始创作') : '登录账号';
+  $('#account-title').textContent = register ? '给灵感一个专属空间' : '欢迎回到映象';
+  $('#account-description').textContent = '无需登录也能创作，注册后每天可生成 10 张。';
+  $('#auth-submit').textContent = register ? '注册并开始创作' : '登录账号';
 }
 
 function setAuthMode(mode) {
@@ -475,7 +477,7 @@ $('#auth-form').addEventListener('submit', async (event) => {
     $('#auth-confirm-password').value = '';
     $('#account-dialog').close();
     await refreshAll();
-    toast(state.authMode === 'register' ? (result.user.role === 'admin' ? '管理员账号已创建，可以进入用户管理' : '注册成功，每天可以创作 10 张图片') : '登录成功，欢迎回来');
+    toast(state.authMode === 'register' ? '注册成功，每天可以创作 10 张图片' : '登录成功，欢迎回来');
   } catch (error) { showError('#auth-error', error.message); }
   finally { $('#auth-submit').disabled = false; }
 });

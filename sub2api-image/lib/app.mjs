@@ -187,10 +187,14 @@ export function createApp(options = {}) {
   // Existing installations without an administrator belong to their earliest account.
   // Keep every existing administrator and password when upgrading.
   transaction(() => {
-    if (db.prepare("SELECT id FROM users WHERE role='admin' LIMIT 1").get()) return;
     const firstUser = db.prepare('SELECT id FROM users ORDER BY created_at ASC, rowid ASC LIMIT 1').get();
-    if (firstUser) db.prepare("UPDATE users SET role='admin',tier='paid' WHERE id=?").run(firstUser.id);
+    if (!firstUser) return;
+    if (!db.prepare("SELECT id FROM users WHERE role='admin' LIMIT 1").get()) {
+      db.prepare("UPDATE users SET role='admin',tier='paid' WHERE id=?").run(firstUser.id);
+    }
+    db.prepare("INSERT INTO app_settings(key,value) VALUES('setup_complete','1') ON CONFLICT(key) DO UPDATE SET value='1'").run();
   });
+  const isInitialized = () => db.prepare("SELECT value FROM app_settings WHERE key='setup_complete'").get()?.value === '1';
 
   function dayInfo() {
     const shifted = new Date(nowMs() + 8 * 60 * 60 * 1000);
@@ -203,6 +207,18 @@ export function createApp(options = {}) {
     const usage = db.prepare('SELECT used,reserved FROM daily_usage WHERE subject=? AND day=?').get(subject, day) || { used: 0, reserved: 0 };
     const limit = limits[tier];
     return { tier, limit, used: usage.used, reserved: usage.reserved, remaining: Math.max(0, limit - usage.used - usage.reserved), day, resetAt, timeZone: 'Asia/Shanghai' };
+  }
+  function ensureGuestLedger(owner) {
+    const { day } = dayInfo();
+    if (db.prepare('SELECT 1 FROM daily_usage WHERE subject=? AND day=?').get(owner, day)) return;
+    transaction(() => {
+      if (db.prepare('SELECT 1 FROM daily_usage WHERE subject=? AND day=?').get(owner, day)) return;
+      // Carry today's saved usage forward when upgrading from IP-based visitor quotas.
+      const usage = db.prepare('SELECT coalesce(sum(quota_used),0) AS used,coalesce(sum(quota_reserved),0) AS reserved FROM generations WHERE owner=? AND quota_day=?')
+        .get(owner, day);
+      db.prepare('INSERT INTO daily_usage(subject,day,used,reserved) VALUES(?,?,?,?)').run(owner, day, usage.used, usage.reserved);
+      db.prepare('UPDATE generations SET quota_subject=? WHERE owner=? AND quota_day=?').run(owner, owner, day);
+    });
   }
   function settleGeneration(id, status, error = null) {
     transaction(() => {
@@ -224,59 +240,59 @@ export function createApp(options = {}) {
   app.disable('x-powered-by');
   app.set('trust proxy', proxySetting(options.trustProxy ?? process.env.TRUST_PROXY));
   app.get('/healthz', (_req, res) => res.json({ status: 'ok' }));
+  app.use(['/api', '/images'], (_req, res, next) => {
+    // Set this before parsing or rejecting requests so a CDN cannot cache errors or identities.
+    res.set('Cache-Control', 'private, no-store');
+    next();
+  });
   app.use((req, res, next) => {
     res.set('X-Content-Type-Options', 'nosniff');
     res.set('Referrer-Policy', 'same-origin');
     res.set('X-Frame-Options', 'DENY');
     res.set('Content-Security-Policy', "default-src 'self'; img-src 'self' blob: data:; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
     if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
-      const origin = req.get('origin');
       const fetchSite = req.get('sec-fetch-site');
-      let sameOrigin = !origin;
-      try {
-        if (origin) {
-          const source = new URL(origin);
-          // Browsers attest same-origin even when a proxy rewrites Host. Without
-          // that signal, Express honors forwarded host/protocol only from trusted proxies.
-          sameOrigin = ['http:', 'https:'].includes(source.protocol)
-            && (fetchSite === 'same-origin' || source.origin === new URL(`${req.protocol}://${req.host}`).origin);
-        }
-      } catch { sameOrigin = false; }
-      if (!sameOrigin || ['cross-site', 'same-site'].includes(fetchSite)) return res.status(403).json({ error: '请从本应用页面提交请求。' });
+      if (['cross-site', 'same-site'].includes(fetchSite)) return res.status(403).json({ error: '请从本应用页面提交请求。' });
       const contentType = (req.get('content-type') || '').split(';', 1)[0].trim().toLowerCase();
       if (contentType !== 'application/json') return res.status(415).json({ error: '请求必须使用 application/json。' });
     }
     next();
   });
-  app.use('/api', (_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
   app.use(express.json({ limit: '100kb' }));
   const cookieOptions = req => ({ httpOnly: true, sameSite: 'lax', secure: req.secure, path: '/' });
   app.use((req, res, next) => {
-    const isPage = req.path === '/' || req.path === '/index.html';
-    if (!isPage && !req.path.startsWith('/api/') && !req.path.startsWith('/images/')) return next();
-    // Shared asset caches must never receive a visitor identity cookie.
-    if (isPage) res.set('Cache-Control', 'private, no-store');
+    if (!/^\/(?:api|images)(?:\/|$)/i.test(req.path)) return next();
     let guestToken = cookieValue(req, 'sub2api_guest');
+    req.hadGuestCookie = Boolean(guestToken);
     if (!guestToken) {
       guestToken = randomBytes(32).toString('base64url');
-      res.set('Cache-Control', 'private, no-store');
       res.cookie('sub2api_guest', guestToken, { ...cookieOptions(req), maxAge: 365 * 24 * 60 * 60 * 1000 });
     }
     req.guestOwner = `guest:${hashToken(guestToken)}`;
-    req.guestSubject = `guest:${createHmac('sha256', guestSalt).update(req.ip || req.socket.remoteAddress || 'unknown').digest('hex')}`;
+    req.csrfToken = createHmac('sha256', guestSalt).update('csrf:').update(guestToken).digest('base64url');
+    ensureGuestLedger(req.guestOwner);
     const token = cookieValue(req, 'sub2api_session');
     req.user = token ? db.prepare('SELECT users.* FROM sessions JOIN users ON users.id=sessions.user_id WHERE sessions.token_hash=? AND sessions.expires_at>?')
       .get(hashToken(token), nowMs()) || null : null;
     req.owner = req.user ? `user:${req.user.id}` : req.guestOwner;
-    req.quotaSubject = req.user ? `user:${req.user.id}` : req.guestSubject;
+    req.quotaSubject = req.user ? `user:${req.user.id}` : req.guestOwner;
     req.tier = req.user ? (req.user.role === 'admin' ? 'paid' : req.user.tier) : 'guest';
+    next();
+  });
+  app.use('/api', (req, res, next) => {
+    if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+    const token = req.get('x-csrf-token') || '';
+    if (!req.hadGuestCookie || token.length !== req.csrfToken.length
+      || !sameBytes(Buffer.from(token), Buffer.from(req.csrfToken))) {
+      return res.status(403).json({ error: '请求验证失败，请刷新页面后重试。' });
+    }
     next();
   });
 
   const publicUser = user => user ? { id: user.id, username: user.username, role: user.role, tier: user.role === 'admin' ? 'paid' : user.tier } : null;
   const me = req => ({
-    user: publicUser(req.user), quota: quotaFor(req.quotaSubject, req.tier),
-    needsSetup: !db.prepare('SELECT id FROM users LIMIT 1').get(),
+    user: publicUser(req.user), quota: quotaFor(req.quotaSubject, req.tier), csrfToken: req.csrfToken,
+    needsSetup: !isInitialized(),
   });
   function requireAdmin(req) {
     if (!req.user) throw httpError(401, '请先登录管理员账号。');
@@ -296,7 +312,13 @@ export function createApp(options = {}) {
 
   app.get('/api/config', (_req, res) => res.json({ model: config.model, configured: Boolean(config.baseUrl && config.apiKey), timeoutSeconds, basicMode: config.basicMode, quotaTimezone: 'Asia/Shanghai' }));
   app.get('/api/me', (req, res) => res.json(me(req)));
-  app.post('/api/auth/register', async (req, res) => {
+  function requireAccountCreationState(isSetup) {
+    if (isSetup) {
+      if (isInitialized() || db.prepare('SELECT id FROM users LIMIT 1').get()) throw httpError(409, '本站已完成初始化，不能重复创建管理员。');
+    } else if (!isInitialized()) throw httpError(409, '请先完成初始化。');
+  }
+  async function createAccount(req, res, isSetup) {
+    requireAccountCreationState(isSetup);
     const { username, password } = credentials(req.body);
     if (db.prepare('SELECT id FROM users WHERE username=?').get(username)) throw httpError(409, '此用户名已被使用，请换一个用户名。');
     const salt = randomBytes(16).toString('hex');
@@ -304,10 +326,11 @@ export function createApp(options = {}) {
     const id = randomUUID();
     try {
       transaction(() => {
-        // Decide after password hashing, inside the same write transaction as insertion.
-        const firstUser = !db.prepare('SELECT id FROM users LIMIT 1').get();
+        // Recheck after hashing under the same write lock as the account and setup marker.
+        requireAccountCreationState(isSetup);
         db.prepare('INSERT INTO users(id,username,password_salt,password_hash,role,tier,created_at) VALUES(?,?,?,?,?,?,?)')
-          .run(id, username, salt, hash, firstUser ? 'admin' : 'user', firstUser ? 'paid' : 'registered', isoNow());
+          .run(id, username, salt, hash, isSetup ? 'admin' : 'user', isSetup ? 'paid' : 'registered', isoNow());
+        if (isSetup) db.prepare("INSERT INTO app_settings(key,value) VALUES('setup_complete','1') ON CONFLICT(key) DO UPDATE SET value='1'").run();
       });
     } catch (error) {
       if (error.code?.startsWith('SQLITE_CONSTRAINT') || /UNIQUE constraint/i.test(error.message)) throw httpError(409, '此用户名已被使用，请换一个用户名。');
@@ -315,7 +338,9 @@ export function createApp(options = {}) {
     }
     startSession(req, res, db.prepare('SELECT * FROM users WHERE id=?').get(id));
     res.status(201).json(me(req));
-  });
+  }
+  app.post('/api/setup', (req, res) => createAccount(req, res, true));
+  app.post('/api/auth/register', (req, res) => createAccount(req, res, false));
   app.post('/api/auth/login', async (req, res) => {
     const { username, password } = credentials(req.body);
     const user = db.prepare('SELECT * FROM users WHERE username=?').get(username);
@@ -331,7 +356,7 @@ export function createApp(options = {}) {
     res.clearCookie('sub2api_session', cookieOptions(req));
     req.user = null;
     req.owner = req.guestOwner;
-    req.quotaSubject = req.guestSubject;
+    req.quotaSubject = req.guestOwner;
     req.tier = 'guest';
     res.json(me(req));
   });
@@ -524,6 +549,20 @@ export function createApp(options = {}) {
     res.download(path.join(imageDir, req.params.filename), `sub2api-${req.params.filename}`, error => {
       if (error && !res.headersSent) res.status(error.statusCode || 500).json({ error: '图片不存在或暂时无法下载。' });
     });
+  });
+  app.get(['/', '/index.html'], (_req, res, next) => {
+    if (isInitialized()) return next();
+    res.set('Cache-Control', 'private, no-store');
+    res.redirect(302, '/setup');
+  });
+  app.get(['/setup', '/setup/'], (_req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    if (isInitialized()) return res.redirect(302, '/');
+    res.sendFile('setup.html', { root: path.join(rootDir, 'views') });
+  });
+  app.get('/setup.html', (_req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    res.redirect(302, '/setup');
   });
   app.use('/vendor/phosphor', express.static(path.join(rootDir, 'node_modules/@phosphor-icons/web/src'), { index: false, dotfiles: 'deny', maxAge: '7d' }));
   app.use(express.static(path.join(rootDir, 'public'), { index: 'index.html', dotfiles: 'deny' }));

@@ -121,11 +121,20 @@ async function fixture(t, options = {}) {
 
   function client(ip = '203.0.113.1') {
     const cookies = new Map();
+    let csrfToken;
+    let tokenCookie;
+    let initializing;
     const request = async (path, init = {}) => {
-      const fetchRequest = init.headers?.host ? requestWithHost : fetch;
+      const { csrf = true, ...fetchOptions } = init;
+      const mutation = !['GET', 'HEAD', 'OPTIONS'].includes((init.method || 'GET').toUpperCase());
+      if (mutation && csrf && (!csrfToken || tokenCookie !== cookies.get('sub2api_guest'))) {
+        initializing ||= request('/api/me', { csrf: false }).finally(() => { initializing = null; });
+        await initializing;
+      }
+      const fetchRequest = fetchOptions.headers?.host ? requestWithHost : fetch;
       const response = await fetchRequest(`${appUrl}${path}`, {
-        ...init,
-        headers: { 'content-type': 'application/json', 'x-forwarded-for': ip, ...(cookies.size ? { cookie: [...cookies].map(([name, value]) => `${name}=${value}`).join('; ') } : {}), ...init.headers },
+        ...fetchOptions,
+        headers: { 'content-type': 'application/json', 'x-forwarded-for': ip, ...(cookies.size ? { cookie: [...cookies].map(([name, value]) => `${name}=${value}`).join('; ') } : {}), ...(mutation && csrf ? { 'x-csrf-token': csrfToken } : {}), ...fetchOptions.headers },
         body: init.body === undefined ? undefined : JSON.stringify(init.body),
       });
       for (const header of response.headers.getSetCookie()) {
@@ -135,6 +144,13 @@ async function fixture(t, options = {}) {
         const value = pair.slice(index + 1);
         if (!value || /max-age=0/i.test(header)) cookies.delete(name);
         else cookies.set(name, value);
+      }
+      if (response.ok && (path === '/api/me' || path === '/api/setup' || path.startsWith('/api/auth/'))) {
+        const result = await response.clone().json();
+        if (typeof result.csrfToken === 'string') {
+          csrfToken = result.csrfToken;
+          tokenCookie = cookies.get('sub2api_guest');
+        }
       }
       return response;
     };
@@ -146,6 +162,11 @@ async function fixture(t, options = {}) {
     const register = async (username = 'alice', extra = {}) => {
       const response = await request('/api/auth/register', { method: 'POST', body: { username, password: userPassword, ...extra } });
       assert.ok([200, 201].includes(response.status), await response.clone().text());
+      return response.json();
+    };
+    const setup = async (username = adminUsername, password = adminPassword) => {
+      const response = await request('/api/setup', { method: 'POST', body: { username, password } });
+      assert.equal(response.status, 201, await response.clone().text());
       return response.json();
     };
     const login = async (username = adminUsername, password = adminPassword) => {
@@ -171,10 +192,10 @@ async function fixture(t, options = {}) {
       }
       throw new Error(`Generation ${id} did not finish within 8 seconds`);
     };
-    return { request, me, register, login, generate, completed, cookies };
+    return { request, me, register, setup, login, generate, completed, cookies, get csrfToken() { return csrfToken; } };
   }
   if (bootstrapAdmin) {
-    const firstAdmin = await client('203.0.113.254').register(adminUsername, { password: adminPassword });
+    const firstAdmin = await client('203.0.113.254').setup();
     assert.equal(firstAdmin.user.role, 'admin');
   }
   return {
@@ -240,7 +261,7 @@ test('a guest can create exactly three images per day and deleting history does 
   assert.equal(f.requests.filter((request) => request.method === 'POST').length, 1);
 });
 
-test('guests share quota by IP but history and images remain scoped to each browser', async (t) => {
+test('browsers sharing a CDN IP keep separate guest quotas, histories and images', async (t) => {
   const f = await fixture(t);
   const first = f.client('203.0.113.22');
   const second = f.client('203.0.113.22');
@@ -249,7 +270,7 @@ test('guests share quota by IP but history and images remain scoped to each brow
   await second.me();
   const job = await first.generate({ n: 2 });
   const done = await first.completed(job.id);
-  assert.equal((await second.me()).quota.remaining, 1);
+  assert.equal((await second.me()).quota.remaining, 3);
   assert.equal((await otherIp.me()).quota.remaining, 3);
   assert.equal((await (await second.request('/api/generations')).json()).total, 0);
   assert.equal((await second.request(`/api/generations/${job.id}`)).status, 404);
@@ -258,15 +279,17 @@ test('guests share quota by IP but history and images remain scoped to each brow
   assert.equal((await second.request(done.images[0].downloadUrl)).status, 404);
   const own = await second.generate();
   await second.completed(own.id);
-  assert.equal((await first.me()).quota.remaining, 0);
+  assert.equal((await second.me()).quota.remaining, 2);
+  assert.equal((await first.me()).quota.remaining, 1);
 });
 
-test('untrusted forwarded headers cannot create fresh visitor quota', async (t) => {
+test('a browser cookie preserves guest quota across IP and proxy header changes', async (t) => {
   const f = await fixture(t, { trustProxy: false });
   const first = f.client('203.0.113.31');
   const spoofed = f.client('198.51.100.91');
   const job = await first.generate({ n: 3 });
   await first.completed(job.id);
+  for (const [name, value] of first.cookies) spoofed.cookies.set(name, value);
   assert.equal((await spoofed.me()).quota.remaining, 0);
   assert.equal((await spoofed.request('/api/generations', { method: 'POST', body: { prompt: 'spoofed ip' } })).status, 429);
 });
@@ -491,7 +514,7 @@ test('invalid authentication and generation inputs and cross-site mutations are 
     assert.equal(response.status, 400, await response.clone().text());
   }
   for (const path of ['/api/auth/register', '/api/auth/login', '/api/generations']) {
-    const crossed = await c.request(path, { method: 'POST', headers: { origin: 'https://evil.example' }, body: { username: 'valid_name', password: userPassword, prompt: 'cross-site image' } });
+    const crossed = await c.request(path, { method: 'POST', headers: { origin: 'https://evil.example', 'sec-fetch-site': 'cross-site' }, body: { username: 'valid_name', password: userPassword, prompt: 'cross-site image' } });
     assert.equal(crossed.status, 403, path);
   }
   assert.equal(f.requests.length, 0);
@@ -595,7 +618,7 @@ test('legacy shared history is visible only to an administrator after migration'
   assert.equal((await admin.me()).quota.used, 0);
 });
 
-test('guest identity cookies cannot be cached with shared static assets', async (t) => {
+test('cacheable HTML and static assets have no identity cookies while the identity API is private', async (t) => {
   const f = await fixture(t);
   const fresh = f.client();
   const asset = await fresh.request('/vendor/phosphor/regular/style.css');
@@ -603,9 +626,16 @@ test('guest identity cookies cannot be cached with shared static assets', async 
   assert.equal(asset.headers.getSetCookie().length, 0);
   const home = await fresh.request('/');
   assert.equal(home.status, 200);
-  assert.ok(home.headers.getSetCookie().some((value) => value.startsWith('sub2api_guest=')));
-  assert.match(home.headers.get('cache-control'), /private/);
-  assert.match(home.headers.get('cache-control'), /no-store/);
+  assert.equal(home.headers.getSetCookie().length, 0);
+  assert.match(home.headers.get('cache-control'), /public/);
+  const identity = await fresh.request('/api/me');
+  assert.ok(identity.headers.getSetCookie().some((value) => value.startsWith('sub2api_guest=') && /HttpOnly/i.test(value)));
+  assert.match(identity.headers.get('cache-control'), /private/);
+  assert.match(identity.headers.get('cache-control'), /no-store/);
+  const { csrfToken } = await identity.json();
+  assert.equal(typeof csrfToken, 'string');
+  assert.ok(csrfToken.length >= 32);
+  assert.notEqual(csrfToken, fresh.cookies.get('sub2api_guest'));
 });
 
 test('a valid account session without a visitor cookie still scopes history to that account', async (t) => {
@@ -625,35 +655,47 @@ test('a valid account session without a visitor cookie still scopes history to t
   assert.equal((await account.request(visitorDone.images[0].url)).status, 404);
 });
 
-test('concurrent first registrations create exactly one administrator and later users cannot forge privileges', async (t) => {
+test('only one concurrent setup succeeds and ordinary registration cannot claim an uninitialized installation', async (t) => {
   const f = await fixture(t, { bootstrapAdmin: false });
   const clients = Array.from({ length: 3 }, (_, index) => f.client(`203.0.113.${100 + index}`));
   assert.equal((await clients[0].me()).needsSetup, true);
-  const attempts = await Promise.all(clients.map((client, index) => client.register(`creator_${index}`, { role: 'admin', tier: 'paid' })));
-  assert.equal(attempts.filter((result) => result.user.role === 'admin').length, 1);
-  assert.equal(attempts.filter((result) => result.user.role === 'user' && result.user.tier === 'registered' && result.quota.limit === 10).length, 2);
-  const adminIndex = attempts.findIndex((result) => result.user.role === 'admin');
-  assert.equal(attempts[adminIndex].user.tier, 'paid');
-  assert.equal(attempts[adminIndex].quota.limit, 100);
+  const registration = await clients[0].request('/api/auth/register', { method: 'POST', body: { username: 'cannot_claim_admin', password: userPassword, role: 'admin', tier: 'paid' } });
+  assert.equal(registration.status, 409);
+  assert.equal((await clients[0].me()).needsSetup, true);
+  const attempts = await Promise.all(clients.map((client, index) => client.request('/api/setup', { method: 'POST', body: { username: `creator_${index}`, password: userPassword } })));
+  assert.equal(attempts.filter((response) => response.status === 201).length, 1);
+  assert.equal(attempts.filter((response) => response.status === 409).length, 2);
+  const adminIndex = attempts.findIndex((response) => response.status === 201);
+  const administrator = await attempts[adminIndex].json();
+  assert.equal(administrator.user.role, 'admin');
+  assert.equal(administrator.user.tier, 'paid');
+  assert.equal(administrator.quota.limit, 100);
   assert.equal((await f.client('203.0.113.120').me()).needsSetup, false);
   await f.restart();
-  for (let index = 0; index < clients.length; index++) assert.equal((await clients[index].me()).user.role, attempts[index].user.role);
+  assert.equal((await clients[adminIndex].me()).user.id, administrator.user.id);
+  const repeated = await clients[adminIndex].request('/api/setup', { method: 'POST', body: { username: 'replacement_admin', password: userPassword } });
+  assert.equal(repeated.status, 409);
   const later = await f.client('203.0.113.121').register('later_creator', { role: 'admin', tier: 'paid' });
   assert.equal(later.user.role, 'user');
   assert.equal(later.user.tier, 'registered');
   const users = await (await clients[adminIndex].request('/api/admin/users')).json();
-  assert.equal(users.total, 4);
+  assert.equal(users.total, 2);
   assert.equal(users.items.filter((user) => user.role === 'admin').length, 1);
 });
 
-test('the first account may use admin as its name and setup status disappears immediately', async (t) => {
+test('setup accepts admin as the account name and validation errors do not complete initialization', async (t) => {
   const f = await fixture(t, { bootstrapAdmin: false });
   const first = f.client();
   const before = await first.me();
   assert.equal(before.needsSetup, true);
   assert.equal(before.user, null);
   assert.equal(before.quota.limit, 3);
-  const registered = await first.register('admin');
+  for (const body of [{ username: 'ab', password: adminPassword }, { username: 'admin', password: 'short' }]) {
+    const rejected = await first.request('/api/setup', { method: 'POST', body });
+    assert.equal(rejected.status, 400);
+    assert.equal((await first.me()).needsSetup, true);
+  }
+  const registered = await first.setup('admin', userPassword);
   assert.equal(registered.user.role, 'admin');
   assert.equal(registered.user.tier, 'paid');
   assert.equal(registered.quota.limit, 100);
@@ -672,7 +714,7 @@ test('obsolete ADMIN environment variables never create accounts or change the f
   const f = await fixture(t, { bootstrapAdmin: false });
   const first = f.client();
   assert.equal((await first.me()).needsSetup, true);
-  await first.register('injected_admin', { password: userPassword });
+  await first.setup('injected_admin', userPassword);
   process.env.ADMIN_PASSWORD = 'changed-obsolete-env-password';
   await f.restart();
   const fresh = f.client('203.0.113.123');
@@ -742,22 +784,22 @@ test('migration preserves an existing administrator even when a normal account i
   assert.equal(users.items.find((user) => user.role === 'admin').id, 'existing-admin');
 });
 
-test('trusted reverse proxies allow registration, administrator login and generation using the public host and port', async (t) => {
+test('CSRF-protected setup and generation work across arbitrary public hosts without proxy configuration', async (t) => {
   for (const publicHost of ['images.example.test', 'images.example.test:8443']) {
     await t.test(publicHost, async (caseContext) => {
-      const f = await fixture(caseContext, { bootstrapAdmin: false, trustProxy: 1 });
+      const f = await fixture(caseContext, { bootstrapAdmin: false, trustProxy: false });
       const client = f.client();
-      const headers = { host: 'sub2api-image:3000', origin: `https://${publicHost}`, 'x-forwarded-host': publicHost, 'x-forwarded-proto': 'https' };
-      const registration = await client.request('/api/auth/register', { method: 'POST', headers, body: { username: 'admin', password: adminPassword } });
+      const headers = { host: 'sub2api-image:3000', origin: `https://${publicHost}` };
+      const registration = await client.request('/api/setup', { method: 'POST', headers, body: { username: 'admin', password: adminPassword } });
       assert.equal(registration.status, 201, await registration.clone().text());
       assert.equal((await registration.json()).user.role, 'admin');
       const registrationCookie = registration.headers.getSetCookie().find((header) => header.startsWith('sub2api_session='));
       assert.ok(registrationCookie);
-      assert.match(registrationCookie, /;\s*Secure(?:;|$)/i);
+      assert.match(registrationCookie, /;\s*HttpOnly(?:;|$)/i);
       assert.equal((await client.request('/api/auth/logout', { method: 'POST', headers })).status, 200);
       const login = await client.request('/api/auth/login', { method: 'POST', headers, body: { username: 'admin', password: adminPassword } });
       assert.equal(login.status, 200, await login.clone().text());
-      assert.match(login.headers.getSetCookie().find((header) => header.startsWith('sub2api_session=')), /;\s*Secure(?:;|$)/i);
+      assert.equal((await login.json()).user.role, 'admin');
       const generation = await client.request('/api/generations', { method: 'POST', headers, body: { prompt: 'An image submitted through a reverse proxy' } });
       assert.equal(generation.status, 202, await generation.clone().text());
       assert.equal((await client.completed((await generation.json()).generation.id)).status, 'completed');
@@ -765,41 +807,58 @@ test('trusted reverse proxies allow registration, administrator login and genera
   }
 });
 
-test('same-origin browser Fetch Metadata allows a proxy-rewritten Host when no forwarded host is present', async (t) => {
-  const f = await fixture(t, { bootstrapAdmin: false, trustProxy: 1 });
+test('CSRF tokens remain stable across setup, registration, login, logout and multiple tabs', async (t) => {
+  const f = await fixture(t, { bootstrapAdmin: false });
   const client = f.client();
-  const headers = { host: 'sub2api-image:3000', origin: 'https://images.example.test:8443', 'x-forwarded-proto': 'https', 'sec-fetch-site': 'same-origin' };
-  const registration = await client.request('/api/auth/register', { method: 'POST', headers, body: { username: 'admin', password: adminPassword } });
-  assert.equal(registration.status, 201, await registration.clone().text());
-  assert.equal((await registration.json()).user.role, 'admin');
-  assert.match(registration.headers.getSetCookie().find((header) => header.startsWith('sub2api_session=')), /;\s*Secure(?:;|$)/i);
-  assert.equal((await client.request('/api/auth/logout', { method: 'POST', headers })).status, 200);
-  assert.equal((await client.request('/api/auth/login', { method: 'POST', headers, body: { username: 'admin', password: adminPassword } })).status, 200);
-  const submitted = await client.request('/api/generations', { method: 'POST', headers, body: { prompt: 'A browser request behind a Host-rewriting proxy' } });
-  assert.equal(submitted.status, 202, await submitted.clone().text());
-  assert.equal((await client.completed((await submitted.json()).generation.id)).status, 'completed');
+  const initial = await client.me();
+  const otherTab = f.client('203.0.113.200');
+  for (const [name, value] of client.cookies) otherTab.cookies.set(name, value);
+  assert.equal((await otherTab.me()).csrfToken, initial.csrfToken);
+  assert.equal((await client.setup('admin', adminPassword)).csrfToken, initial.csrfToken);
+  const logout = await client.request('/api/auth/logout', { method: 'POST' });
+  assert.equal((await logout.json()).csrfToken, initial.csrfToken);
+  assert.equal((await client.login('admin', adminPassword)).csrfToken, initial.csrfToken);
+  assert.equal((await (await client.request('/api/auth/logout', { method: 'POST' })).json()).csrfToken, initial.csrfToken);
+  assert.equal((await client.register('ordinary_member')).csrfToken, initial.csrfToken);
+  assert.equal((await otherTab.me()).csrfToken, initial.csrfToken);
+  const submitted = await otherTab.generate({ prompt: 'A still-open tab remains usable after a session change' });
+  assert.equal((await otherTab.completed(submitted.id)).status, 'completed');
 });
 
-test('untrusted forwarded host and protocol cannot bypass Origin checks or mark cookies Secure', async (t) => {
-  const f = await fixture(t, { bootstrapAdmin: false, trustProxy: false });
+test('missing, incorrect and another browser CSRF tokens cannot authorize mutations', async (t) => {
+  const f = await fixture(t);
   const client = f.client();
-  const headers = { host: 'sub2api-image:3000', origin: 'https://attacker.example.test', 'x-forwarded-host': 'attacker.example.test', 'x-forwarded-proto': 'https' };
-  const rejected = await client.request('/api/auth/register', { method: 'POST', headers, body: { username: 'intruder', password: userPassword } });
-  assert.equal(rejected.status, 403);
-  const identity = await client.request('/api/me', { headers });
-  assert.equal((await identity.json()).needsSetup, true);
-  const cookie = identity.headers.getSetCookie().find((header) => header.startsWith('sub2api_guest='));
-  assert.ok(cookie);
-  assert.doesNotMatch(cookie, /;\s*Secure(?:;|$)/i);
+  const otherBrowser = f.client();
+  const own = await client.me();
+  const other = await otherBrowser.me();
+  assert.notEqual(own.csrfToken, other.csrfToken);
+  assert.notEqual(own.csrfToken, client.cookies.get('sub2api_guest'));
+  const mutations = [
+    ['POST', '/api/setup'], ['POST', '/api/auth/register'], ['POST', '/api/auth/login'], ['POST', '/api/auth/logout'],
+    ['POST', '/api/generations'], ['DELETE', '/api/generations/missing'], ['PATCH', '/api/admin/users/missing'],
+  ];
+  for (const token of [undefined, 'incorrect-token', other.csrfToken, client.cookies.get('sub2api_guest')]) {
+    for (const [method, path] of mutations) {
+      const response = await client.request(path, {
+        method, csrf: false, headers: token ? { 'x-csrf-token': token } : {},
+        body: { username: 'rejected_account', password: userPassword, prompt: 'Rejected CSRF request', tier: 'paid' },
+      });
+      assert.equal(response.status, 403, `${method} ${path}: ${await response.clone().text()}`);
+    }
+  }
+  const withoutCookie = await f.client().request('/api/auth/register', {
+    method: 'POST', csrf: false, headers: { 'x-csrf-token': own.csrfToken }, body: { username: 'rejected_account', password: userPassword },
+  });
+  assert.equal(withoutCookie.status, 403);
   assert.equal(f.requests.length, 0);
 });
 
-test('same-site and cross-site browser metadata are rejected even when Origin matches a trusted public host', async (t) => {
-  const f = await fixture(t, { bootstrapAdmin: false, trustProxy: 1 });
+test('same-site and cross-site browser metadata are rejected even when the CSRF token is correct', async (t) => {
+  const f = await fixture(t, { bootstrapAdmin: false, trustProxy: false });
   const client = f.client();
   for (const site of ['same-site', 'cross-site']) {
-    for (const path of ['/api/auth/register', '/api/auth/login', '/api/generations']) {
-      const headers = { host: 'sub2api-image:3000', origin: 'https://images.example.test', 'x-forwarded-host': 'images.example.test', 'x-forwarded-proto': 'https', 'sec-fetch-site': site };
+    for (const path of ['/api/setup', '/api/auth/register', '/api/auth/login', '/api/generations']) {
+      const headers = { host: 'sub2api-image:3000', origin: 'https://images.example.test', 'sec-fetch-site': site };
       const response = await client.request(path, { method: 'POST', headers, body: { username: 'rejected_account', password: userPassword, prompt: 'This cross-origin submission must be rejected' } });
       assert.equal(response.status, 403, `${site} ${path}: ${await response.clone().text()}`);
     }
@@ -808,26 +867,92 @@ test('same-site and cross-site browser metadata are rejected even when Origin ma
   assert.equal(f.requests.length, 0);
 });
 
-test('requests without same-origin Fetch Metadata still require a matching valid Origin when one is provided', async (t) => {
-  const f = await fixture(t, { bootstrapAdmin: false, trustProxy: 1 });
+test('CSRF authorization is independent of rewritten Origin and proxy headers but still requires JSON', async (t) => {
+  const f = await fixture(t, { trustProxy: false });
   const client = f.client();
-  for (const origin of ['https://attacker.example.test', 'https://images.example.test:8443', 'http://images.example.test', 'null', 'malformed origin']) {
-    const response = await client.request('/api/auth/register', {
-      method: 'POST', headers: { host: 'sub2api-image:3000', origin, 'x-forwarded-host': 'images.example.test', 'x-forwarded-proto': 'https' },
-      body: { username: 'rejected_account', password: userPassword },
+  for (const [index, origin] of ['https://cdn.example.test:8443', 'http://different-layer.internal', 'null', 'malformed origin'].entries()) {
+    const response = await client.request('/api/auth/login', {
+      method: 'POST', headers: { host: 'sub2api-image:3000', origin, 'x-forwarded-host': 'unrelated-proxy.internal', 'x-forwarded-proto': 'http', 'x-forwarded-for': `198.51.100.${index}, 192.0.2.1` },
+      body: { username: adminUsername, password: adminPassword },
     });
-    assert.equal(response.status, 403, `${origin}: ${await response.clone().text()}`);
+    assert.equal(response.status, 200, `${origin}: ${await response.clone().text()}`);
   }
-  for (const origin of ['null', 'malformed origin', 'ftp://images.example.test']) {
-    const response = await client.request('/api/auth/register', {
-      method: 'POST', headers: { host: 'sub2api-image:3000', origin, 'sec-fetch-site': 'same-origin' },
-      body: { username: 'rejected_account', password: userPassword },
-    });
-    assert.equal(response.status, 403, `${origin}: ${await response.clone().text()}`);
-  }
-  const direct = await client.request('/api/auth/register', {
-    method: 'POST', headers: { host: 'sub2api-image:3000', origin: 'http://sub2api-image:3000' },
-    body: { username: 'direct_admin', password: adminPassword },
+  const nonJson = await client.request('/api/generations', {
+    method: 'POST', headers: { 'content-type': 'text/plain' }, body: { prompt: 'Rejected non-JSON request' },
   });
-  assert.equal(direct.status, 201, await direct.clone().text());
+  assert.equal(nonJson.status, 415);
+});
+
+test('API and image successes and errors always disable shared caching', async (t) => {
+  const f = await fixture(t);
+  const client = f.client();
+  const job = await client.generate();
+  const done = await client.completed(job.id);
+  const responses = [
+    await client.request('/api/me'), await client.request('/api/config'), await client.request('/api/missing'),
+    await client.request('/api/generations', { method: 'POST', csrf: false, body: { prompt: 'missing token' } }),
+    await client.request('/api/generations', { method: 'POST', body: { prompt: '' } }),
+    await client.request(done.images[0].url), await client.request(done.images[0].downloadUrl),
+    await f.client().request(done.images[0].url), await client.request('/images/not-found.png'),
+  ];
+  for (const response of responses) {
+    assert.match(response.headers.get('cache-control'), /private/, `HTTP ${response.status}`);
+    assert.match(response.headers.get('cache-control'), /no-store/, `HTTP ${response.status}`);
+  }
+});
+
+test('the private setup wizard becomes a home redirect after initialization and remains locked after restart', async (t) => {
+  const f = await fixture(t, { bootstrapAdmin: false });
+  const client = f.client();
+  for (const path of ['/', '/index.html']) {
+    const home = await client.request(path, { redirect: 'manual' });
+    assert.equal(home.status, 302);
+    assert.equal(home.headers.get('location'), '/setup');
+    assert.equal(home.headers.getSetCookie().length, 0);
+    assert.match(home.headers.get('cache-control'), /private/);
+    assert.match(home.headers.get('cache-control'), /no-store/);
+  }
+  for (const path of ['/setup', '/setup/']) {
+    const page = await client.request(path, { redirect: 'manual' });
+    assert.equal(page.status, 200, `${path}: ${await page.clone().text()}`);
+    assert.match(page.headers.get('content-type'), /text\/html/);
+    assert.match(page.headers.get('cache-control'), /private/);
+    assert.match(page.headers.get('cache-control'), /no-store/);
+    assert.equal(page.headers.getSetCookie().length, 0);
+  }
+  const alias = await client.request('/setup.html', { redirect: 'manual' });
+  assert.equal(alias.status, 302);
+  assert.equal(alias.headers.get('location'), '/setup');
+  await client.setup();
+  for (const path of ['/setup', '/setup/']) {
+    const page = await client.request(path, { redirect: 'manual' });
+    assert.equal(page.status, 302);
+    assert.equal(page.headers.get('location'), '/');
+    assert.match(page.headers.get('cache-control'), /no-store/);
+  }
+  await f.restart();
+  assert.equal((await client.me()).needsSetup, false);
+  assert.equal((await client.request('/api/setup', { method: 'POST', body: { username: 'another_admin', password: adminPassword } })).status, 409);
+  const home = await client.request('/');
+  assert.equal(home.status, 200);
+  assert.doesNotMatch(await home.text(), /创建管理员账号/);
+});
+
+test('a completed setup flag cannot be reopened even when the users table is empty', async (t) => {
+  const f = await fixture(t, {
+    bootstrapAdmin: false,
+    setupData: async ({ dataDir }) => {
+      const db = new DatabaseSync(join(dataDir, 'history.sqlite'));
+      db.exec('CREATE TABLE app_settings (key TEXT PRIMARY KEY,value TEXT NOT NULL)');
+      db.prepare("INSERT INTO app_settings(key,value) VALUES('setup_complete','1')").run();
+      db.close();
+    },
+  });
+  const client = f.client();
+  assert.equal((await client.me()).needsSetup, false);
+  const setup = await client.request('/api/setup', { method: 'POST', body: { username: 'replacement_admin', password: adminPassword } });
+  assert.equal(setup.status, 409);
+  const page = await client.request('/setup', { redirect: 'manual' });
+  assert.equal(page.status, 302);
+  assert.equal(page.headers.get('location'), '/');
 });
