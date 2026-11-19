@@ -17,18 +17,27 @@
   <body>
     <a class="skip-link" href="#main">跳到主要内容</a>
     <aside class="sidebar">
-      <a href="#studio" class="brand" aria-label="映象首页">
+      <div class="brand" aria-label="映象">
         <span class="brand-mark"
           ><i class="ph ph-aperture" aria-hidden="true"></i
         ></span>
         <span>映象<span class="brand-sub">IMAGE STUDIO</span></span>
-      </a>
-      <div class="nav-caption">你的创作空间</div>
+      </div>
       <nav aria-label="主导航">
-        <a href="#studio" class="nav-link active" data-page="studio"
+        <a
+          href="#studio"
+          class="nav-link active"
+          data-page="studio"
+          aria-label="创作工作台"
+          title="创作工作台"
           ><i class="ph ph-sparkle" aria-hidden="true"></i>创作工作台</a
         >
-        <a href="#history" class="nav-link" data-page="history"
+        <a
+          href="#history"
+          class="nav-link"
+          data-page="history"
+          aria-label="历史记录"
+          title="历史记录"
           ><i class="ph ph-images" aria-hidden="true"></i>历史记录<span
             id="nav-count"
             class="nav-count"
@@ -40,35 +49,12 @@
           id="admin-nav"
           class="nav-link"
           data-page="admin"
+          aria-label="用户管理"
+          title="用户管理"
           hidden
           ><i class="ph ph-users-three" aria-hidden="true"></i>用户管理</a
         >
       </nav>
-      <div class="sidebar-note">
-        <i class="ph ph-lightbulb" aria-hidden="true"></i>
-        <p>好画面，始于一个想法。<br />试着描述光线、材质与氛围。</p>
-      </div>
-      <div class="sidebar-bottom">
-        <button class="connection-card" data-action="account">
-          <span class="connection-icon"
-            ><i class="ph ph-user-circle" aria-hidden="true"></i></span
-          ><span
-            ><strong id="sidebar-username">游客创作</strong
-            ><small id="sidebar-status">正在读取额度</small></span
-          ><i class="ph ph-caret-right" aria-hidden="true"></i>
-        </button>
-        <button
-          class="nav-link settings-nav"
-          data-action="account"
-          aria-label="我的账号"
-        >
-          <i class="ph ph-user-circle" aria-hidden="true"></i
-          ><span id="account-nav-label">登录 / 注册</span>
-        </button>
-        <div class="local-note">
-          <i class="ph ph-hard-drives" aria-hidden="true"></i>仅你可见的创作记录
-        </div>
-      </div>
     </aside>
 
     <div class="app-shell">
@@ -77,7 +63,12 @@
           工作空间<i class="ph ph-caret-right" aria-hidden="true"></i
           ><span id="breadcrumb-page">创作工作台</span>
         </div>
-        <button class="status-button" data-action="account">
+        <button
+          class="status-button"
+          data-action="account"
+          aria-label="我的账号"
+          aria-haspopup="dialog"
+        >
           <span id="connection-dot" class="status-dot"></span
           ><span id="connection-label">登录 / 注册</span
           ><i class="ph ph-user-circle" aria-hidden="true"></i>
@@ -92,13 +83,6 @@
             <strong id="quota-title">正在读取今日额度</strong>
             <p id="quota-description">每天北京时间零点更新</p>
           </div>
-          <button
-            class="button secondary"
-            id="quota-action"
-            data-action="register"
-          >
-            注册领取每日 10 张
-          </button>
         </section>
         <section id="studio-page" aria-labelledby="studio-title">
           <div class="page-heading">
@@ -279,9 +263,6 @@
                   >每一张画面，都是灵感的切片</span
                 >
               </div>
-              <a href="#history" class="text-link"
-                >查看全部<i class="ph ph-arrow-right" aria-hidden="true"></i
-              ></a>
             </div>
             <div
               id="recent-grid"
@@ -302,9 +283,6 @@
                 浏览画面、找回提示词，让灵感接着发生。
               </p>
             </div>
-            <a href="#studio" class="button primary"
-              ><i class="ph ph-plus" aria-hidden="true"></i>新的创作</a
-            >
           </div>
           <div class="history-stats">
             <div><span id="stat-total">0</span><small>创作记录</small></div>
@@ -388,11 +366,6 @@
             aria-label="用户列表分页"
           ></nav>
         </section>
-        <footer class="page-footer">
-          <span
-            >映象<span class="footer-separator">/</span>想象力，自有形状。</span
-          ><span>Powered by sub2api</span>
-        </footer>
       </main>
     </div>
 
@@ -506,9 +479,7 @@
         <p id="upgrade-description" class="account-history-note">
           如需升级付费用户，请联系管理员开通，每天可生成 100 张图片。
         </p>
-        <a id="profile-admin-link" href="#admin" class="button secondary" hidden
-          >进入用户管理<i class="ph ph-arrow-right" aria-hidden="true"></i></a
-        ><button id="logout-button" class="button secondary" type="button">
+        <button id="logout-button" class="button secondary" type="button">
           退出登录
         </button>
       </div>

@@ -174,13 +174,6 @@ p {
   color: #79857a;
   margin-top: 4px;
 }
-.nav-caption {
-  font-size: 11px;
-  color: #8b938b;
-  padding: 0 14px;
-  margin-bottom: 14px;
-  letter-spacing: 1px;
-}
 .nav-link {
   border: 0;
   background: none;
@@ -214,88 +207,13 @@ p {
   text-align: center;
   padding: 3px 5px;
 }
-.sidebar-note {
-  margin: 35px 14px;
-  display: flex;
-  gap: 9px;
-  color: #8b948b;
-  font-size: 11px;
-  line-height: 1.9;
-}
-.sidebar-note .ph {
-  font-size: 17px;
-  margin-top: 4px;
-}
-.sidebar-bottom {
-  margin-top: auto;
-}
-.connection-card {
-  display: flex;
-  gap: 11px;
-  align-items: center;
-  border: 1px solid var(--line);
-  border-radius: 11px;
-  background: var(--surface);
-  padding: 13px 11px;
-  width: 100%;
-  text-align: left;
-}
-.connection-card:hover {
-  border-color: #c2d4c7;
-}
-.connection-icon {
-  width: 33px;
-  height: 33px;
-  border-radius: 8px;
-  display: grid;
-  place-items: center;
-  background: var(--tint);
-  color: var(--accent);
-}
-.connection-card strong {
-  display: block;
-  font-size: 12px;
-  font-weight: 600;
-}
-.connection-card small {
-  display: block;
-  color: var(--muted);
-  font-size: 10px;
-  margin-top: 5px;
-  max-width: 100px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.connection-card > .ph {
-  margin-left: auto;
-  font-size: 14px;
-  color: #8b958c;
-}
-.settings-nav {
-  margin-top: 14px;
-  margin-bottom: 16px;
-  font-size: 12px;
-}
-.settings-nav .ph {
-  font-size: 19px;
-}
-.local-note {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  font-size: 9px;
-  color: #919a90;
-  white-space: nowrap;
-}
-.local-note .ph {
-  font-size: 13px;
-}
 .app-shell {
   margin-left: 224px;
 }
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 15;
   height: 72px;
   padding: 0 42px;
   display: flex;
@@ -349,7 +267,7 @@ p {
 main {
   max-width: 1510px;
   margin: auto;
-  padding: 34px 42px 0;
+  padding: 34px 42px 32px;
 }
 .page-heading {
   display: flex;
@@ -1006,19 +924,6 @@ select:disabled {
 .section-heading .small {
   font-size: 10px;
 }
-.text-link {
-  color: #7c8a72;
-  font-size: 11px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-.text-link .ph {
-  font-size: 14px;
-}
-.text-link:hover {
-  color: var(--accent);
-}
 .image-grid {
   display: grid;
   gap: 17px;
@@ -1161,20 +1066,6 @@ select:disabled {
 .empty-state .text-button {
   margin-top: 8px;
   padding-left: 0;
-}
-.page-footer {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 9px;
-  color: #a2aa98;
-  margin-top: 38px;
-  padding: 21px 0 22px;
-  border-top: 1px solid #e6eae1;
-}
-.footer-separator {
-  color: #bec6b5;
-  margin: 0 9px;
 }
 .history-stats {
   display: flex;
@@ -1522,7 +1413,7 @@ body:has(dialog[open]) {
     padding: 0 25px;
   }
   main {
-    padding: 28px 25px 0;
+    padding: 28px 25px 32px;
   }
   .workspace {
     grid-template-columns: minmax(300px, 340px) minmax(0, 1fr);
@@ -1559,12 +1450,6 @@ body:has(dialog[open]) {
   .toast {
     left: calc(50% + 95px);
   }
-  .local-note {
-    font-size: 8px;
-  }
-  .local-note .ph {
-    font-size: 11px;
-  }
   .history-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1578,11 +1463,7 @@ body:has(dialog[open]) {
     padding: 0 7px 32px;
   }
   .brand > span:last-child,
-  .nav-caption,
-  .nav-link:not(.settings-nav) > .nav-count,
-  .sidebar-note,
-  .connection-card,
-  .local-note {
+  .nav-count {
     display: none;
   }
   .brand-mark {
@@ -1722,13 +1603,6 @@ body:has(dialog[open]) {
     flex: 1;
     margin-top: 0;
   }
-  .page-heading > .button {
-    font-size: 10px;
-    padding: 9px 10px;
-  }
-  .page-heading > .button .ph {
-    font-size: 14px;
-  }
   .history-stats small {
     font-size: 10px;
   }
@@ -1789,22 +1663,11 @@ body:has(dialog[open]) {
   .nav-link .ph {
     font-size: 16px;
   }
-  .sidebar-bottom {
-    margin: 0;
-  }
-  .settings-nav {
-    width: 34px;
-    min-height: 34px;
-    font-size: 0;
-    padding: 6px;
-  }
-  .settings-nav .ph {
-    font-size: 19px;
-  }
   .app-shell {
     margin-left: 0;
   }
   .topbar {
+    top: 60px;
     height: 49px;
     padding: 0 18px;
     background: #fcfdfb;
@@ -1824,7 +1687,7 @@ body:has(dialog[open]) {
     margin-left: 2px;
   }
   main {
-    padding: 25px 18px 0;
+    padding: 25px 18px 32px;
   }
   h1 {
     font-size: 23px;
@@ -1875,9 +1738,6 @@ body:has(dialog[open]) {
   .section-heading .small {
     font-size: 9px;
   }
-  .text-link {
-    font-size: 10px;
-  }
   .image-grid {
     gap: 12px;
   }
@@ -1890,10 +1750,6 @@ body:has(dialog[open]) {
   }
   .card-meta {
     font-size: 8px;
-  }
-  .page-footer {
-    font-size: 8px;
-    margin-top: 29px;
   }
   .toast {
     left: 50%;
@@ -1949,15 +1805,6 @@ body:has(dialog[open]) {
   .generate-button kbd {
     font-size: 8px;
   }
-  .page-heading > .button {
-    min-height: 35px;
-    font-size: 10px;
-    padding: 8px;
-    gap: 4px;
-  }
-  .page-heading > .button .ph {
-    display: none;
-  }
   #history-title {
     font-size: 21px;
   }
@@ -2008,13 +1855,6 @@ body:has(dialog[open]) {
   margin-top: 7px;
   line-height: 1.7;
 }
-.quota-banner > .button {
-  margin-left: auto;
-  font-size: 11px;
-  background: #ffffffb8;
-  border-color: #d5e2cf;
-  color: var(--accent);
-}
 .field-label {
   display: block;
   font-size: 11px;
@@ -2052,12 +1892,6 @@ body:has(dialog[open]) {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-.connection-card strong {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  max-width: 108px;
 }
 .auth-tabs {
   display: grid;
@@ -2159,8 +1993,7 @@ body:has(dialog[open]) {
   font-weight: 500;
   color: #5f7453;
 }
-#logout-button,
-#profile-admin-link {
+#logout-button {
   width: 100%;
   margin-top: 17px;
 }
@@ -2258,10 +2091,6 @@ body:has(dialog[open]) {
   .quota-banner p {
     font-size: 10px;
   }
-  .quota-banner > .button {
-    font-size: 10px;
-    padding: 9px 10px;
-  }
   .admin-user {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 17px;
@@ -2296,14 +2125,6 @@ body:has(dialog[open]) {
     font-size: 9px;
     margin-top: 5px;
   }
-  .quota-banner > .button {
-    grid-column: 2;
-    margin: 2px 0 0;
-    justify-self: start;
-    min-height: 30px;
-    padding: 6px 9px;
-    font-size: 10px;
-  }
   .status-button {
     max-width: 190px;
   }
@@ -2335,5 +2156,19 @@ body:has(dialog[open]) {
   }
   .account-dialog .field label {
     font-size: 12px;
+  }
+}
+
+@media (max-width: 360px) {
+  .sidebar .nav-link {
+    min-width: 40px;
+    min-height: 40px;
+    justify-content: center;
+    padding: 8px;
+    gap: 0;
+    font-size: 0;
+  }
+  .sidebar .nav-link .ph {
+    font-size: 20px;
   }
 }

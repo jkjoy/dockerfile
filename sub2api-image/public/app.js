@@ -119,13 +119,8 @@ function renderQuota() {
   const tier = user?.role === 'admin' ? '管理员' : tierLabels[quota.tier] || '游客';
   $('#quota-title').textContent = `今日还可生成 ${quota.remaining} 张图片`;
   $('#quota-description').textContent = `${tier} · 每日 ${quota.limit} 张${quota.reserved ? ` · ${quota.reserved} 张生成中` : ''} · 北京时间零点更新`;
-  $('#quota-action').textContent = !user ? '注册领取每日 10 张' : quota.tier === 'paid' ? '查看我的额度' : '升级享每日 100 张';
-  $('#quota-action').dataset.action = user ? 'account' : 'register';
-  $('#sidebar-username').textContent = user?.username || '游客创作';
-  $('#sidebar-status').textContent = `${tier} · 今日剩余 ${quota.remaining} 张`;
   $('#connection-label').textContent = user ? `${user.username} · ${tier}` : '登录 / 注册';
   $('#connection-dot').classList.toggle('connected', Boolean(user));
-  $('#account-nav-label').textContent = user ? '我的账号' : '登录 / 注册';
   $('#admin-nav').hidden = user?.role !== 'admin';
   $('#profile-username').textContent = user?.username || '';
   $('#profile-tier').textContent = user?.role === 'admin' ? '管理员' : tier;
@@ -133,7 +128,6 @@ function renderQuota() {
   $('#profile-used').textContent = quota.used;
   $('#profile-reserved').textContent = quota.reserved;
   $('#upgrade-description').textContent = quota.tier === 'paid' ? '你已享有每天 100 张图片的创作额度。' : '如需升级付费用户，请联系管理员开通，每天可生成 100 张图片。';
-  $('#profile-admin-link').hidden = user?.role !== 'admin';
   if ($('#account-dialog').open) {
     $('#auth-content').hidden = Boolean(user);
     $('#profile-content').hidden = !user;
@@ -498,10 +492,8 @@ document.addEventListener('click', async (event) => {
   if (!button || button.disabled) return;
   try {
     if (button.dataset.action === 'account') openAccount();
-    if (button.dataset.action === 'register') openAccount('register');
     if (button.dataset.authMode) setAuthMode(button.dataset.authMode);
     if (button.dataset.close) $(`#${button.dataset.close}`).close();
-    if (button.id === 'profile-admin-link') $('#account-dialog').close();
     if (button.dataset.preset) { $('#prompt').value = presets[button.dataset.preset]; saveDraft(); $('#prompt').focus(); }
     if (button.dataset.generation) await openDetail(button.dataset.generation);
     if (button.dataset.reuse) await reuseGeneration(button.dataset.reuse);
@@ -593,7 +585,7 @@ async function init() {
     renderConfig();
     await loadMe();
     restoreDraft();
-  } catch (error) { $('#sidebar-status').textContent = '服务连接失败'; toast(error.message, true); }
+  } catch (error) { toast(error.message, true); }
   setView();
   await refreshAll();
 }
